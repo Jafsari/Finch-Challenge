@@ -44,11 +44,6 @@ npm start
    - Frontend: http://localhost:3000
    - Backend: http://localhost:4000
 
-## Screenshots
-
-![App Screenshot](screenshot.png)
-*Main application interface showing company info and employee directory*
-
 ## How it works
 
 1. Click "Connect with Finch" to start OAuth flow
