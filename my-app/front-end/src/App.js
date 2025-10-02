@@ -14,6 +14,8 @@ function MainApp() {
   var companyState = useState(null);
   var employeesState = useState([]);
   var selectedEmployeeState = useState(null);
+  var loadingState = useState(false);
+  var errorState = useState(null);
   
   var company = companyState[0];
   var setCompany = companyState[1];
@@ -21,6 +23,10 @@ function MainApp() {
   var setEmployees = employeesState[1];
   var selectedEmployee = selectedEmployeeState[0];
   var setSelectedEmployee = selectedEmployeeState[1];
+  var loading = loadingState[0];
+  var setLoading = loadingState[1];
+  var error = errorState[0];
+  var setError = errorState[1];
   
   // Debounce timer ref
   var debounceTimer = useRef(null);
@@ -28,6 +34,9 @@ function MainApp() {
   // Fetch data after Finch Connect completes
   function fetchAfterConnect() {
     return new Promise(function(resolve, reject) {
+      setLoading(true);
+      setError(null);
+      
       // Get company info
       axios.get("http://localhost:4000/company")
         .then(function(companyRes) {
@@ -44,12 +53,18 @@ function MainApp() {
             employeeData = directoryRes.data;
           }
           setEmployees(employeeData);
+          setLoading(false);
           
           resolve();
         })
         .catch(function(err) {
           const errorMessage = err.response?.data?.error || "Failed to fetch company or employee data";
-          alert(errorMessage);
+          setError({
+            message: errorMessage,
+            type: 'fetch_data',
+            canRetry: true
+          });
+          setLoading(false);
           reject(err);
         });
     });
@@ -81,7 +96,11 @@ function MainApp() {
       })
       .catch(function(err) {
         const errorMessage = err.response?.data?.error || "Failed to start Finch Connect";
-        alert(errorMessage);
+        setError({
+          message: errorMessage,
+          type: 'connect',
+          canRetry: true
+        });
       });
   }
 
@@ -100,9 +119,27 @@ function MainApp() {
         })
         .catch(function(err) {
           const errorMessage = err.response?.data?.error || "Failed to fetch employee data";
-          alert(errorMessage);
+          setError({
+            message: errorMessage,
+            type: 'employee_details',
+            canRetry: false
+          });
         });
     }, 300); // 300ms delay
+  }
+
+  // Retry function for errors
+  function handleRetry() {
+    if (error && error.type === 'fetch_data') {
+      fetchAfterConnect();
+    } else if (error && error.type === 'connect') {
+      connectFinchReal();
+    }
+  }
+
+  // Clear error function
+  function clearError() {
+    setError(null);
   }
 
   // Render app
@@ -113,13 +150,44 @@ function MainApp() {
       <Header company={company} />
 
       <main className="main-content">
+        {/* Error Display */}
+        {error && (
+          <div className="error-container">
+            <div className="error-card">
+              <div className="error-icon">⚠️</div>
+              <div className="error-content">
+                <h3>Something went wrong</h3>
+                <p>{error.message}</p>
+                <div className="error-actions">
+                  {error.canRetry && (
+                    <button className="retry-button" onClick={handleRetry}>
+                      Try Again
+                    </button>
+                  )}
+                  <button className="dismiss-button" onClick={clearError}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p>Loading your data...</p>
+          </div>
+        )}
+
         {/* Show connect button when no data loaded yet */}
-        {shouldShowConnectButton && (
+        {shouldShowConnectButton && !loading && (
           <ConnectButton onConnect={connectFinchReal} />
         )}
 
         {/* Show company info after connection */}
-        <CompanyInfo company={company} />
+        <CompanyInfo company={company} loading={loading} error={error} />
 
         {/* Employee list and details side by side */}
         <EmployeeSection 

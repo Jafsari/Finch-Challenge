@@ -29,6 +29,9 @@ npm install
 FINCH_CLIENT_ID=your_client_id
 FINCH_CLIENT_SECRET=your_client_secret
 REDIRECT_URI=http://localhost:4000/finch/callback
+
+# In my-app/front-end/ directory, create .env file:
+REACT_APP_NO_ERROR_OVERLAY=true
 ```
 
 3. **Start the servers:**
@@ -49,9 +52,10 @@ npm start
 ## How it works
 
 1. Click "Connect with Finch" to start OAuth flow
-2. Complete Finch Connect in popup window
-3. App fetches and displays company info and employee directory
-4. Click any employee to see detailed individual + employment data
+2. **Connect to Justworks** when prompted in the Finch Connect popup
+3. Complete Finch Connect authorization
+4. App fetches and displays company info and employee directory
+5. Click any employee to see detailed individual + employment data
 
 ## Important Notes
 

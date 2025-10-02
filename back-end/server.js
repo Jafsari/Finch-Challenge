@@ -27,6 +27,14 @@ const finch = new Finch({
 
 // Helper functions
 
+// Generate random customer ID
+function generateRandomCustomerId() {
+  const prefix = "customer_";
+  const timestamp = Date.now().toString();
+  const randomSuffix = Math.random().toString(36).substring(2, 15);
+  return prefix + timestamp + "_" + randomSuffix;
+}
+
 // Get token from header or stored token
 function getAccessToken(req) {
   var authHeader = req.headers.authorization;
@@ -116,7 +124,7 @@ app.post("/create_link_token", function(req, res) {
   console.log("[Finch] Creating connect session");
   
   finch.connect.sessions.new({
-    customer_id: "Test_123456789344454444544444",
+    customer_id: generateRandomCustomerId(),
     customer_name: "Test",
     products: ["company", "directory", "individual", "employment"],
     sandbox: "finch",
