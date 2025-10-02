@@ -123,7 +123,7 @@ app.post("/create_link_token", function(req, res) {
   console.log("[Finch] Creating connect session");
   
   finch.connect.sessions.new({
-    customer_id: "Test_1234567893444544445444",
+    customer_id: "Test_12345678934445444454444",
     customer_name: "Test",
     products: ["company", "directory", "individual", "employment"],
     sandbox: "finch",
