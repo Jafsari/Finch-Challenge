@@ -53,6 +53,25 @@ function handleApiError(err, res, endpoint) {
   var status = 500;
   var message = { error: "Failed to fetch " + endpoint };
   
+  // Handle network errors (socket hang up, connection refused, etc.)
+  if (err && (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || 
+              err.message && err.message.includes('socket hang up'))) {
+    console.error("/" + endpoint + " network error:", err.message || err.code);
+    return res.status(503).json({ 
+      error: "Network connection error. Please try again later.",
+      details: "Unable to connect to Finch API"
+    });
+  }
+  
+  // Handle timeout errors
+  if (err && (err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND')) {
+    console.error("/" + endpoint + " timeout error:", err.message || err.code);
+    return res.status(504).json({ 
+      error: "Request timeout. Please try again later.",
+      details: "Finch API request timed out"
+    });
+  }
+  
   if (err && err.response) {
     status = err.response.status || 500;
     message = err.response.data || message;
@@ -63,6 +82,14 @@ function handleApiError(err, res, endpoint) {
   // Handle provider errors
   if (status === 404 || status === 501) {
     return res.status(status).json({ error: "Provider does not implement " + endpoint + " endpoint" });
+  }
+  
+  // Handle rate limiting
+  if (status === 429) {
+    return res.status(429).json({ 
+      error: "Too many requests. Please wait a moment and try again.",
+      details: "Rate limit exceeded"
+    });
   }
   
   res.status(status).json(message);
@@ -96,7 +123,7 @@ app.post("/create_link_token", function(req, res) {
   console.log("[Finch] Creating connect session");
   
   finch.connect.sessions.new({
-    customer_id: "Test_123444447023444434566735",
+    customer_id: "Test_1234567893444544445444",
     customer_name: "Test",
     products: ["company", "directory", "individual", "employment"],
     sandbox: "finch",
@@ -112,6 +139,14 @@ app.post("/create_link_token", function(req, res) {
   })
   .catch(function(err) {
     console.error("Failed to create session:", err);
+    console.error("Error details:", {
+      status: err.status,
+      code: err.error?.code,
+      name: err.error?.name,
+      message: err.error?.message,
+      finch_code: err.error?.finch_code,
+      context: err.error?.context
+    });
     res.status(500).json({ error: "Failed to create session" });
   });
 });

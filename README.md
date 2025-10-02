@@ -17,7 +17,7 @@ cd back-end
 npm install
 
 # Frontend  
-cd ../my-app
+cd ../my-app/front-end
 npm install
 ```
 
@@ -36,7 +36,7 @@ cd back-end
 nodemon server.js
 
 # Terminal 2 - Frontend (port 3000)
-cd my-app
+cd my-app/front-end
 npm start
 ```
 

@@ -48,7 +48,8 @@ function MainApp() {
           resolve();
         })
         .catch(function(err) {
-          alert("Failed to fetch company or employee data");
+          const errorMessage = err.response?.data?.error || "Failed to fetch company or employee data";
+          alert(errorMessage);
           reject(err);
         });
     });
@@ -79,7 +80,8 @@ function MainApp() {
         // Popup will postMessage back when done
       })
       .catch(function(err) {
-        alert("Failed to start Finch Connect");
+        const errorMessage = err.response?.data?.error || "Failed to start Finch Connect";
+        alert(errorMessage);
       });
   }
 
@@ -97,7 +99,8 @@ function MainApp() {
           setSelectedEmployee(res.data);
         })
         .catch(function(err) {
-          alert("Failed to fetch employee data");
+          const errorMessage = err.response?.data?.error || "Failed to fetch employee data";
+          alert(errorMessage);
         });
     }, 300); // 300ms delay
   }
