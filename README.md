@@ -1,4 +1,6 @@
 # Finch HR Integration
+<img width="1374" height="730" alt="Screenshot 2025-10-01 at 8 23 19 PM" src="https://github.com/user-attachments/assets/a5c462da-6bbb-4fc7-854c-26344dc64304" />
+
 
 A React frontend with Node.js backend that integrates with Finch's HR API to display company and employee data.
 
