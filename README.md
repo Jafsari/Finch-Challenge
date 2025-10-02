@@ -19,7 +19,7 @@ cd back-end
 npm install
 
 # Frontend  
-cd ../my-app
+cd ../my-app/front-end
 npm install
 ```
 
