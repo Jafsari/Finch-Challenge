@@ -107,14 +107,7 @@ app.get("/test", function(req, res) {
   res.json({ message: "Backend working!" });
 });
 
-// Check token status (dev helper)
-app.get("/token/status", function(req, res) {
-  if (!currentAccessToken) {
-    return res.json({ hasToken: false });
-  }
-  var masked = currentAccessToken.slice(0,4) + "..." + currentAccessToken.slice(-4);
-  return res.json({ hasToken: true, masked: masked });
-});
+
 
 // Finch Connect flow
 
@@ -123,7 +116,7 @@ app.post("/create_link_token", function(req, res) {
   console.log("[Finch] Creating connect session");
   
   finch.connect.sessions.new({
-    customer_id: "Test_12345678934445444454444",
+    customer_id: "Test_123456789344454444544444",
     customer_name: "Test",
     products: ["company", "directory", "individual", "employment"],
     sandbox: "finch",
