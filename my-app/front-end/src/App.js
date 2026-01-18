@@ -4,9 +4,23 @@ import "./App.css";
 
 // Components
 import Header from "./components/Header";
+import Hero from "./components/Hero";
+import Features from "./components/Features";
+import HowItWorks from "./components/HowItWorks";
 import ConnectButton from "./components/ConnectButton";
 import CompanyInfo from "./components/CompanyInfo";
+import DeductionsInfo from "./components/DeductionsInfo";
+import PayrollInfo from "./components/PayrollInfo";
+import DocumentsInfo from "./components/DocumentsInfo";
+import WorkforceInfo from "./components/WorkforceInfo";
 import EmployeeSection from "./components/EmployeeSection";
+import Footer from "./components/Footer";
+import SyncStatus from "./components/SyncStatus";
+import EnforceSync from "./components/EnforceSync";
+import OrgChart from "./components/OrgChart";
+import EligibilityInfo from "./components/EligibilityInfo";
+import HeadcountReports from "./components/HeadcountReports";
+import AuditReports from "./components/AuditReports";
 
 // Main app component - handles Finch Connect flow and data display
 function MainApp() {
@@ -14,8 +28,20 @@ function MainApp() {
   var companyState = useState(null);
   var employeesState = useState([]);
   var selectedEmployeeState = useState(null);
+  var selectedPayrollEmployeeState = useState(null);
+  var payStatementsState = useState([]);
+  var selectedDeductionsEmployeeState = useState(null);
+  var employeeDeductionsState = useState([]);
+  var eligibilityDataState = useState(null);
+  var retirement401kState = useState(null);
+  var selectedDocumentsEmployeeState = useState(null);
+  var employeeDocumentsState = useState([]);
+  var newHiresState = useState([]);
+  var terminatedEmployeesState = useState([]);
+  var activeRouteState = useState('organization');
   var loadingState = useState(false);
   var errorState = useState(null);
+  var syncTimesState = useState({});
   
   var company = companyState[0];
   var setCompany = companyState[1];
@@ -23,13 +49,40 @@ function MainApp() {
   var setEmployees = employeesState[1];
   var selectedEmployee = selectedEmployeeState[0];
   var setSelectedEmployee = selectedEmployeeState[1];
+  var selectedPayrollEmployee = selectedPayrollEmployeeState[0];
+  var setSelectedPayrollEmployee = selectedPayrollEmployeeState[1];
+  var payStatements = payStatementsState[0];
+  var setPayStatements = payStatementsState[1];
+  var selectedDeductionsEmployee = selectedDeductionsEmployeeState[0];
+  var setSelectedDeductionsEmployee = selectedDeductionsEmployeeState[1];
+  var employeeDeductions = employeeDeductionsState[0];
+  var setEmployeeDeductions = employeeDeductionsState[1];
+  var eligibilityData = eligibilityDataState[0];
+  var setEligibilityData = eligibilityDataState[1];
+  var retirement401k = retirement401kState[0];
+  var setRetirement401k = retirement401kState[1];
+  var selectedDocumentsEmployee = selectedDocumentsEmployeeState[0];
+  var setSelectedDocumentsEmployee = selectedDocumentsEmployeeState[1];
+  var employeeDocuments = employeeDocumentsState[0];
+  var setEmployeeDocuments = employeeDocumentsState[1];
+  var newHires = newHiresState[0];
+  var setNewHires = newHiresState[1];
+  var terminatedEmployees = terminatedEmployeesState[0];
+  var setTerminatedEmployees = terminatedEmployeesState[1];
+  var activeRoute = activeRouteState[0];
+  var setActiveRoute = activeRouteState[1];
   var loading = loadingState[0];
   var setLoading = loadingState[1];
   var error = errorState[0];
   var setError = errorState[1];
+  var syncTimes = syncTimesState[0];
+  var setSyncTimes = syncTimesState[1];
   
   // Debounce timer ref
   var debounceTimer = useRef(null);
+  var payrollDebounceTimer = useRef(null);
+  var deductionsDebounceTimer = useRef(null);
+  var documentsDebounceTimer = useRef(null);
 
   // Fetch data after Finch Connect completes
   function fetchAfterConnect() {
@@ -53,6 +106,32 @@ function MainApp() {
             employeeData = directoryRes.data;
           }
           setEmployees(employeeData);
+          
+          // Set initial sync times for all tabs ONCE at login - these will never change
+          var now = new Date();
+          var nowISO = now.toISOString();
+          
+          // Analytics sync time is 12 hours before
+          var analyticsTime = new Date(now.getTime() - (12 * 60 * 60 * 1000));
+          var analyticsISO = analyticsTime.toISOString();
+          
+          setSyncTimes({
+            organization: nowISO,
+            company: nowISO,
+            directory: nowISO,
+            payroll: nowISO,
+            payStatements: nowISO,
+            deductions: nowISO,
+            documents: nowISO,
+            workforce: nowISO,
+            newHires: nowISO,
+            terminated: nowISO,
+            eligibility: nowISO,
+            orgchart: nowISO,
+            analytics: analyticsISO,
+            audit: nowISO
+          });
+          
           setLoading(false);
           
           resolve();
@@ -128,6 +207,301 @@ function MainApp() {
     }, 300); // 300ms delay
   }
 
+  // Handle payroll employee selection - fetch pay statements
+  function handlePayrollEmployeeClick(id) {
+    // Clear previous timer
+    if (payrollDebounceTimer.current) {
+      clearTimeout(payrollDebounceTimer.current);
+    }
+    
+    // Clear old pay statements immediately to prevent showing wrong data
+    setPayStatements([]);
+    
+    // Set selected employee
+    var employee = employees.find(function(emp) {
+      return emp.id === id;
+    });
+    setSelectedPayrollEmployee(employee);
+    
+    // Set new timer to fetch pay statements
+    payrollDebounceTimer.current = setTimeout(function() {
+      axios.get("http://localhost:4000/employee/" + id + "/pay-statements")
+        .then(function(res) {
+          // Extract pay statements from response structure
+          var statements = [];
+          
+          console.log("[Frontend] Pay statement response:", res.data);
+          
+          if (res.data && res.data.responses) {
+            // Finch API returns responses array where each response.body IS the pay statement object
+            res.data.responses.forEach(function(response) {
+              // Check response code - 200 means success
+              if (response.code === 200 && response.body) {
+                var bodyData = response.body;
+                
+                // Check if body has pay_statements array (some formats)
+                if (bodyData.pay_statements && Array.isArray(bodyData.pay_statements)) {
+                  statements = statements.concat(bodyData.pay_statements);
+                } 
+                // Check if body itself is a pay statement object (most common)
+                // Pay statements have fields like gross, net, type, payment_date, etc.
+                else if (bodyData.type || bodyData.payment_id || bodyData.gross || bodyData.gross_pay || bodyData.id) {
+                  // Normalize field names: convert gross/net to gross_pay/net_pay if needed
+                  var normalizedStatement = {
+                    ...bodyData,
+                    // Map common field name variations
+                    gross_pay: bodyData.gross_pay || bodyData.gross || bodyData.earnings || null,
+                    net_pay: bodyData.net_pay || bodyData.net || bodyData.total || null,
+                    pay_date: bodyData.pay_date || bodyData.payment_date || bodyData.date || null,
+                    start_date: bodyData.start_date || bodyData.period_start || null,
+                    end_date: bodyData.end_date || bodyData.period_end || null,
+                    individual_id: bodyData.individual_id || id,
+                    currency: bodyData.currency || 'USD'
+                  };
+                  statements.push(normalizedStatement);
+                }
+                // Check if body is an array of pay statements
+                else if (Array.isArray(bodyData)) {
+                  statements = statements.concat(bodyData);
+                }
+              }
+            });
+          } else if (Array.isArray(res.data)) {
+            // Direct array of pay statements
+            statements = res.data;
+          } else if (res.data && res.data.pay_statements && Array.isArray(res.data.pay_statements)) {
+            // Pay statements nested in a pay_statements property
+            statements = res.data.pay_statements;
+          } else if (res.data && (res.data.id || res.data.payment_id || res.data.type)) {
+            // Single pay statement object
+            var normalizedStatement = {
+              ...res.data,
+              gross_pay: res.data.gross_pay || res.data.gross || null,
+              net_pay: res.data.net_pay || res.data.net || null,
+              pay_date: res.data.pay_date || res.data.payment_date || null,
+              individual_id: res.data.individual_id || id,
+              currency: res.data.currency || 'USD'
+            };
+            statements = [normalizedStatement];
+          }
+          
+          // Ensure each statement has individual_id set and normalize field formats
+          statements = statements.map(function(stmt) {
+            if (!stmt.individual_id && id) {
+              stmt.individual_id = id;
+            }
+            
+            // Handle gross_pay - can be object {amount, currency} or number
+            if (stmt.gross_pay && typeof stmt.gross_pay === 'object' && stmt.gross_pay.amount !== undefined) {
+              // Extract amount from object, preserving currency
+              stmt.gross_pay_amount = stmt.gross_pay.amount;
+              stmt.gross_pay_currency = stmt.gross_pay.currency || stmt.currency || 'USD';
+              stmt.gross_pay = stmt.gross_pay.amount; // For backwards compatibility
+            } else if (!stmt.gross_pay) {
+              // Try alternative field names
+              var grossValue = stmt.gross || stmt.earnings || null;
+              if (grossValue && typeof grossValue === 'object' && grossValue.amount !== undefined) {
+                stmt.gross_pay = grossValue.amount;
+                stmt.gross_pay_amount = grossValue.amount;
+                stmt.gross_pay_currency = grossValue.currency || stmt.currency || 'USD';
+              } else {
+                stmt.gross_pay = grossValue;
+                stmt.gross_pay_amount = grossValue;
+              }
+            } else {
+              // gross_pay is already a number
+              stmt.gross_pay_amount = stmt.gross_pay;
+            }
+            
+            // Handle net_pay - can be object {amount, currency} or number
+            if (stmt.net_pay && typeof stmt.net_pay === 'object' && stmt.net_pay.amount !== undefined) {
+              // Extract amount from object, preserving currency
+              stmt.net_pay_amount = stmt.net_pay.amount;
+              stmt.net_pay_currency = stmt.net_pay.currency || stmt.currency || 'USD';
+              stmt.net_pay = stmt.net_pay.amount; // For backwards compatibility
+            } else if (!stmt.net_pay) {
+              // Try alternative field names
+              var netValue = stmt.net || stmt.total || null;
+              if (netValue && typeof netValue === 'object' && netValue.amount !== undefined) {
+                stmt.net_pay = netValue.amount;
+                stmt.net_pay_amount = netValue.amount;
+                stmt.net_pay_currency = netValue.currency || stmt.currency || 'USD';
+              } else {
+                stmt.net_pay = netValue;
+                stmt.net_pay_amount = netValue;
+              }
+            } else {
+              // net_pay is already a number
+              stmt.net_pay_amount = stmt.net_pay;
+            }
+            
+            // Handle pay_date - try multiple sources
+            if (!stmt.pay_date || stmt.pay_date === null) {
+              // Try various date field names
+              stmt.pay_date = stmt.payment_date || stmt.date || stmt.end_date || stmt.start_date || 
+                              stmt.period_end || stmt.period_start || stmt.pay_period_end || 
+                              stmt.pay_period_start || null;
+            }
+            
+            // Handle start_date and end_date if missing
+            if (!stmt.start_date || stmt.start_date === null) {
+              stmt.start_date = stmt.period_start || stmt.pay_period_start || null;
+            }
+            
+            if (!stmt.end_date || stmt.end_date === null) {
+              stmt.end_date = stmt.period_end || stmt.pay_period_end || stmt.pay_date || null;
+            }
+            
+            // Preserve currency from statement level if not already set
+            if (!stmt.currency) {
+              stmt.currency = stmt.gross_pay_currency || stmt.net_pay_currency || 'USD';
+            }
+            
+            return stmt;
+          });
+          
+          // Filter to ensure all statements match the employee ID (if individual_id is available)
+          statements = statements.filter(function(stmt) {
+            if (stmt.individual_id) {
+              return stmt.individual_id === id;
+            }
+            // If no individual_id field, trust the backend filtering
+            return true;
+          });
+          
+          console.log("[Frontend] Extracted pay statements:", statements);
+          console.log("[Frontend] First statement sample:", statements.length > 0 ? statements[0] : 'No statements');
+          
+          setPayStatements(statements);
+          // Sync times are set once at login and never change
+        })
+        .catch(function(err) {
+          const errorMessage = err.response?.data?.error || "Failed to fetch pay statements";
+          setError({
+            message: errorMessage,
+            type: 'pay_statements',
+            canRetry: false
+          });
+          setPayStatements([]);
+        });
+    }, 300); // 300ms delay
+  }
+
+  // Handle deductions employee selection - fetch deductions
+  function handleDeductionsEmployeeClick(id) {
+    // Clear previous timer
+    if (deductionsDebounceTimer.current) {
+      clearTimeout(deductionsDebounceTimer.current);
+    }
+    
+    // Clear old deductions immediately to prevent showing wrong data
+    setEmployeeDeductions([]);
+    setEligibilityData(null);
+    setRetirement401k(null);
+    
+    // Set selected employee
+    var employee = employees.find(function(emp) {
+      return emp.id === id;
+    });
+    setSelectedDeductionsEmployee(employee);
+    
+    // Set new timer to fetch deductions
+    deductionsDebounceTimer.current = setTimeout(function() {
+      axios.get("http://localhost:4000/employee/" + id + "/deductions")
+        .then(function(res) {
+          // Extract deductions from response
+          var deductions = [];
+          if (res.data && res.data.deductions) {
+            deductions = res.data.deductions;
+          } else if (Array.isArray(res.data)) {
+            deductions = res.data;
+          }
+          
+          // Filter deductions to ensure they match the employee ID
+          deductions = deductions.filter(function(ded) {
+            if (ded.individual_id) {
+              return ded.individual_id === id;
+            }
+            return true;
+          });
+          
+          setEmployeeDeductions(deductions);
+          
+          // Store eligibility and 401k data
+          if (res.data.eligibility) {
+            setEligibilityData(res.data.eligibility);
+          }
+          if (res.data.retirement_401k) {
+            setRetirement401k(res.data.retirement_401k);
+          }
+          
+          // Sync times are set once at login and never change
+        })
+        .catch(function(err) {
+          const errorMessage = err.response?.data?.error || "Failed to fetch deductions";
+          setError({
+            message: errorMessage,
+            type: 'deductions',
+            canRetry: false
+          });
+          setEmployeeDeductions([]);
+          setEligibilityData(null);
+          setRetirement401k(null);
+        });
+    }, 300); // 300ms delay
+  }
+
+  // Handle documents employee selection - fetch documents
+  function handleDocumentsEmployeeClick(id) {
+    // Clear previous timer
+    if (documentsDebounceTimer.current) {
+      clearTimeout(documentsDebounceTimer.current);
+    }
+    
+    // Clear old documents immediately to prevent showing wrong data
+    setEmployeeDocuments([]);
+    
+    // Set selected employee
+    var employee = employees.find(function(emp) {
+      return emp.id === id;
+    });
+    setSelectedDocumentsEmployee(employee);
+    
+    // Set new timer to fetch documents
+    documentsDebounceTimer.current = setTimeout(function() {
+      axios.get("http://localhost:4000/employee/" + id + "/documents")
+        .then(function(res) {
+          // Extract documents from response
+          var documents = [];
+          if (res.data && res.data.documents) {
+            documents = res.data.documents;
+          } else if (Array.isArray(res.data)) {
+            documents = res.data;
+          }
+          
+          // Filter documents to ensure they match the employee ID
+          documents = documents.filter(function(doc) {
+            if (doc.data && doc.data.individual_id) {
+              return doc.data.individual_id === id;
+            }
+            return true;
+          });
+          
+          setEmployeeDocuments(documents);
+          // Sync times are set once at login and never change
+        })
+        .catch(function(err) {
+          const errorMessage = err.response?.data?.error || "Failed to fetch documents";
+          setError({
+            message: errorMessage,
+            type: 'documents',
+            canRetry: false
+          });
+          setEmployeeDocuments([]);
+        });
+    }, 300); // 300ms delay
+  }
+
   // Retry function for errors
   function handleRetry() {
     if (error && error.type === 'fetch_data') {
@@ -142,12 +516,64 @@ function MainApp() {
     setError(null);
   }
 
+  // Handle route change
+  function handleRouteChange(route) {
+    setActiveRoute(route);
+  }
+
+  // Listen for hash changes for navigation
+  useEffect(function() {
+    function handleHashChange() {
+      var hash = window.location.hash.replace('#', '');
+      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'sync') {
+        setActiveRoute(hash);
+      }
+    }
+    
+    // Set initial route from hash
+    handleHashChange();
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return function() {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  // Fetch workforce data when route is active
+  useEffect(function() {
+    if (activeRoute === 'workforce' && (company || employees.length > 0)) {
+      // Fetch new hires
+      axios.get("http://localhost:4000/workforce/new-hires")
+        .then(function(res) {
+          var hires = res.data.new_hires || res.data || [];
+          setNewHires(hires);
+          // Sync times are set once at login and never change
+        })
+        .catch(function(err) {
+          console.error("Error fetching new hires:", err);
+          setNewHires([]);
+        });
+
+      // Fetch terminated employees
+      axios.get("http://localhost:4000/workforce/terminated")
+        .then(function(res) {
+          var terminated = res.data.terminated || res.data || [];
+          setTerminatedEmployees(terminated);
+          // Sync times are set once at login and never change
+        })
+        .catch(function(err) {
+          console.error("Error fetching terminated employees:", err);
+          setTerminatedEmployees([]);
+        });
+    }
+  }, [activeRoute, company, employees.length]);
+
   // Render app
-  var shouldShowConnectButton = !company && employees.length === 0;
+  var isConnected = company || employees.length > 0;
   
   return (
     <div className="app-container">
-      <Header company={company} />
+      <Header company={company} activeRoute={activeRoute} onRouteChange={handleRouteChange} />
 
       <main className="main-content">
         {/* Error Display */}
@@ -181,21 +607,126 @@ function MainApp() {
           </div>
         )}
 
-        {/* Show connect button when no data loaded yet */}
-        {shouldShowConnectButton && !loading && (
-          <ConnectButton onConnect={connectFinchReal} />
+        {/* Landing Page Sections - Show when not connected */}
+        {!isConnected && !loading && (
+          <>
+            <Hero onConnect={connectFinchReal} company={company} />
+            <Features />
+            <HowItWorks />
+          </>
         )}
 
-        {/* Show company info after connection */}
-        <CompanyInfo company={company} loading={loading} error={error} />
+        {/* Connected Content - Show when connected */}
+        {isConnected && !loading && (
+          <div className="connected-content">
+            {/* Sync Status Chart - Show on all tabs */}
+            <SyncStatus syncTimes={syncTimes} activeRoute={activeRoute} />
 
-        {/* Employee list and details side by side */}
+            {/* Organization Route - Company Info + Employee Directory + Employee Details */}
+            {activeRoute === 'organization' && (
+              <>
+        <CompanyInfo company={company} loading={loading} error={error} />
         <EmployeeSection 
           employees={employees}
           selectedEmployee={selectedEmployee}
           onEmployeeClick={handleEmployeeClick}
         />
+              </>
+            )}
+
+            {/* Payroll Route - Payroll Information Only */}
+            {activeRoute === 'payroll' && (
+              <PayrollInfo 
+                employees={employees}
+                selectedPayrollEmployee={selectedPayrollEmployee}
+                payStatements={payStatements}
+                onEmployeeClick={handlePayrollEmployeeClick}
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Deductions Route - Deductions Information Only */}
+            {activeRoute === 'deductions' && (
+              <DeductionsInfo 
+                employees={employees}
+                selectedDeductionsEmployee={selectedDeductionsEmployee}
+                employeeDeductions={employeeDeductions}
+                eligibilityData={eligibilityData}
+                retirement401k={retirement401k}
+                onEmployeeClick={handleDeductionsEmployeeClick}
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Documents Route - Documents Information Only */}
+            {activeRoute === 'documents' && (
+              <DocumentsInfo 
+                employees={employees}
+                selectedDocumentsEmployee={selectedDocumentsEmployee}
+                employeeDocuments={employeeDocuments}
+                onEmployeeClick={handleDocumentsEmployeeClick}
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Workforce Route - New Hires & Off-boarding */}
+            {activeRoute === 'workforce' && (
+              <WorkforceInfo 
+                employees={employees}
+                newHires={newHires}
+                terminatedEmployees={terminatedEmployees}
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Sync Route - Enforce Data Sync */}
+            {activeRoute === 'sync' && (
+              <EnforceSync 
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Eligibility Route - Employee Eligibility Status */}
+            {activeRoute === 'eligibility' && (
+              <EligibilityInfo 
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Org Chart Route - Organizational Chart Visualization */}
+            {activeRoute === 'orgchart' && (
+              <OrgChart 
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Analytics Route - Headcount Reporting & Analytics */}
+            {activeRoute === 'analytics' && (
+              <HeadcountReports 
+                loading={loading}
+                error={error}
+              />
+            )}
+
+            {/* Audit Route - Audit & Compliance Reports */}
+            {activeRoute === 'audit' && (
+              <AuditReports 
+                loading={loading}
+                error={error}
+              />
+            )}
+          </div>
+        )}
       </main>
+
+      <Footer />
     </div>
   );
 }

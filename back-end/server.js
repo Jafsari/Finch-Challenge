@@ -126,8 +126,15 @@ app.post("/create_link_token", function(req, res) {
   finch.connect.sessions.new({
     customer_id: generateRandomCustomerId(),
     customer_name: "Test",
-    products: ["company", "directory", "individual", "employment"],
-    sandbox: "finch",
+    products: ["company",
+      "directory", 
+      "individual",
+      "employment",
+      "payment",
+      "pay_statement",
+      "benefits",
+      "documents",],
+    "sandbox": "provider",
     redirect_uri: process.env.REDIRECT_URI,
   })
   .then(function(session) {
@@ -220,13 +227,6 @@ app.get("/finch/callback", function(req, res) {
     console.error("Callback error:", err);
     res.status(500).send("Connection failed.");
   });
-});
-
-// Block payment endpoints
-
-// Block payment endpoints (as required)
-app.all(["/payment", "/pay-statement"], function(req, res) {
-  res.status(403).json({ error: "Payment endpoints not allowed" });
 });
 
 // HR data endpoints
@@ -359,9 +359,41 @@ app.get("/employee/:id", async function(req, res) {
       return record?.email || "";
     };
 
-    // Helper function to get title/department
-    const getField = (field) => {
-      return individual?.[field] || employment?.[field] || "";
+    // Helper function to format location
+    const formatLocation = (location) => {
+      if (!location) return "";
+      var parts = [];
+      if (location.line1) parts.push(location.line1);
+      if (location.line2) parts.push(location.line2);
+      var cityState = [];
+      if (location.city) cityState.push(location.city);
+      if (location.state) cityState.push(location.state);
+      if (location.postal_code) cityState.push(location.postal_code);
+      if (cityState.length > 0) parts.push(cityState.join(", "));
+      if (location.country) parts.push(location.country);
+      return parts.join(", ") || "";
+    };
+
+    // Helper function to format income
+    const formatIncome = (income) => {
+      if (!income || !income.amount) return "";
+      var formattedAmount = income.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      var unit = income.unit || "";
+      var currency = income.currency || "";
+      var parts = [];
+      if (formattedAmount) parts.push(formattedAmount);
+      if (currency) parts.push(currency);
+      if (unit) parts.push("(" + unit + ")");
+      return parts.join(" ") || "";
+    };
+
+    // Helper function to format employment type
+    const formatEmploymentType = (employmentObj) => {
+      if (!employmentObj) return "";
+      var type = employmentObj.type || "";
+      var subtype = employmentObj.subtype || "";
+      if (type && subtype) return type + " - " + subtype;
+      return type || "";
     };
 
     res.json({
@@ -371,13 +403,1698 @@ app.get("/employee/:id", async function(req, res) {
         email: getEmail(individual)
       },
       employment: {
-        job_title: getField("title"),
-        department: getField("department")?.name || ""
+        // Basic info
+        id: employment.id || "",
+        first_name: employment.first_name || "",
+        last_name: employment.last_name || "",
+        middle_name: employment.middle_name || "",
+        job_title: employment.title || "",
+        department: employment.department?.name || "",
+        department_parent: employment.department?.parent || null,
+        department_source_id: employment.department?.source_id || null,
+        
+        // Employment details
+        employment_type: formatEmploymentType(employment.employment),
+        employment_status: employment.employment_status || "",
+        manager_id: employment.manager?.id || "",
+        
+        // Dates
+        start_date: employment.start_date || "",
+        end_date: employment.end_date || null,
+        latest_rehire_date: employment.latest_rehire_date || "",
+        
+        // Status and classification
+        is_active: employment.is_active || false,
+        class_code: employment.class_code || null,
+        
+        // Location
+        location: formatLocation(employment.location),
+        location_line1: employment.location?.line1 || "",
+        location_line2: employment.location?.line2 || "",
+        location_city: employment.location?.city || "",
+        location_state: employment.location?.state || "",
+        location_postal_code: employment.location?.postal_code || "",
+        location_country: employment.location?.country || "",
+        
+        // Income
+        income: formatIncome(employment.income),
+        income_unit: employment.income?.unit || "",
+        income_amount: employment.income?.amount || null,
+        income_currency: employment.income?.currency || "",
+        income_effective_date: employment.income?.effective_date || "",
+        income_history: employment.income_history || [],
+        
+        // Additional fields
+        custom_fields: employment.custom_fields || [],
+        source_id: employment.source_id || "",
+        work_id: employment.work_id || null
       }
     });
 
   } catch (err) {
     handleApiError(err, res, "employee/" + id);
+  }
+});
+
+// Test Payments endpoint - log response structure
+app.get("/test/payments", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Testing payments endpoint");
+
+  try {
+    // Get date range - default to last year to today
+    var endDate = new Date();
+    var startDate = new Date();
+    startDate.setFullYear(endDate.getFullYear() - 1);
+    
+    var startDateStr = startDate.toISOString().split('T')[0];
+    var endDateStr = endDate.toISOString().split('T')[0];
+
+    console.log("[Finch] Fetching payments from", startDateStr, "to", endDateStr);
+
+    // Fetch payments from Finch API
+    var paymentResp = await finch.fetch('https://api.tryfinch.com/employer/payment?' + 
+      'start_date=' + startDateStr + '&end_date=' + endDateStr, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var paymentData = await paymentResp.json();
+
+    // Log the full response structure
+    console.log("[Finch] Payments API Response Structure:");
+    console.log(JSON.stringify(paymentData, null, 2));
+    console.log("[Finch] Total payments:", Array.isArray(paymentData) ? paymentData.length : 'Not an array');
+
+    // If it's an array, log first payment structure
+    if (Array.isArray(paymentData) && paymentData.length > 0) {
+      console.log("[Finch] First Payment Example:");
+      console.log(JSON.stringify(paymentData[0], null, 2));
+    }
+
+    // Return the raw data for inspection
+    res.json({
+      message: "Payment data logged to server console. Check server logs for full structure.",
+      date_range: {
+        start_date: startDateStr,
+        end_date: endDateStr
+      },
+      payment_count: Array.isArray(paymentData) ? paymentData.length : 'N/A',
+      payments: paymentData
+    });
+
+  } catch (err) {
+    console.error("[Finch] Payments test error:", err);
+    handleApiError(err, res, "test/payments");
+  }
+});
+
+// Get pay statements for a specific employee
+app.get("/employee/:id/pay-statements", async function(req, res) {
+  var token = getAccessToken(req);
+  var id = req.params.id;
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching pay statements for employee:", id);
+
+  try {
+    // First get employment data to find start_date
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: [{ individual_id: id }] })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employment = employmentData?.responses?.[0]?.body || {};
+
+    // Get start date from employment or default to 1 year ago
+    var startDate = new Date();
+    if (employment.start_date) {
+      startDate = new Date(employment.start_date);
+    } else {
+      startDate.setFullYear(startDate.getFullYear() - 1);
+    }
+    
+    // Ensure end date is today, not in the future
+    var endDate = new Date();
+    endDate.setHours(0, 0, 0, 0); // Set to start of day to avoid timezone issues
+    
+    var startDateStr = startDate.toISOString().split('T')[0];
+    var endDateStr = endDate.toISOString().split('T')[0];
+
+    // Ensure start_date is not after end_date
+    if (startDateStr > endDateStr) {
+      startDateStr = endDateStr;
+    }
+
+    console.log("[Finch] Step 1: Fetching payments for individual:", id);
+    console.log("[Finch] Date Range:", startDateStr, "to", endDateStr);
+
+    // Step 1: First fetch payments for the date range
+    var paymentUrl = 'https://api.tryfinch.com/employer/payment?start_date=' + startDateStr + '&end_date=' + endDateStr;
+    console.log("[Finch] Payment URL:", paymentUrl);
+
+    var paymentResp = await finch.fetch(paymentUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    console.log("[Finch] Payment Response Status:", paymentResp.status, paymentResp.statusText);
+
+    var paymentData = await paymentResp.json();
+    console.log("[Finch] Payment Response Data:", JSON.stringify(paymentData, null, 2));
+
+    if (!paymentResp.ok) {
+      console.error("[Finch] ========== PAYMENT API ERROR ==========");
+      console.error("[Finch] Status Code:", paymentResp.status);
+      console.error("[Finch] Status Text:", paymentResp.statusText);
+      console.error("[Finch] Error Response:", JSON.stringify(paymentData, null, 2));
+      console.error("[Finch] =================================================");
+      return res.status(paymentResp.status || 500).json(paymentData);
+    }
+
+    // Step 2: Filter payments by individual_id and extract payment_ids
+    var payments = paymentData.payments || paymentData || [];
+    if (!Array.isArray(payments)) {
+      payments = [];
+    }
+
+    console.log("[Finch] Total payments found:", payments.length);
+    
+    var paymentIds = payments
+      .filter(function(payment) {
+        var individualIds = payment.individual_ids || [];
+        if (Array.isArray(individualIds)) {
+          return individualIds.includes(id);
+        }
+        return false;
+      })
+      .map(function(payment) {
+        return payment.id || payment.payment_id;
+      })
+      .filter(function(pid) {
+        return pid !== null && pid !== undefined;
+      });
+
+    console.log("[Finch] Payment IDs for individual:", paymentIds);
+    console.log("[Finch] Count:", paymentIds.length);
+
+    if (paymentIds.length === 0) {
+      console.log("[Finch] No payment IDs found for individual. Returning empty array.");
+      return res.json({
+        responses: []
+      });
+    }
+
+    // Step 3: Fetch pay statements using payment_ids
+    console.log("[Finch] Step 2: Fetching pay statements for payment IDs");
+    
+    var payStatementRequestBody = {
+      requests: paymentIds.map(function(paymentId) {
+        return { payment_id: paymentId };
+      })
+    };
+
+    console.log("[Finch] Pay Statement Request URL: https://api.tryfinch.com/employer/pay-statement");
+    console.log("[Finch] Pay Statement Request Body:", JSON.stringify(payStatementRequestBody, null, 2));
+
+    var payStatementResp = await finch.fetch('https://api.tryfinch.com/employer/pay-statement', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payStatementRequestBody)
+    });
+
+    console.log("[Finch] Pay Statement Response Status:", payStatementResp.status, payStatementResp.statusText);
+
+    var payStatementData = await payStatementResp.json();
+    console.log("[Finch] Pay Statement Response Data:", JSON.stringify(payStatementData, null, 2));
+    
+    if (!payStatementResp.ok || payStatementData.code === 400) {
+      console.error("[Finch] ========== PAY STATEMENT API ERROR ==========");
+      console.error("[Finch] Status Code:", payStatementResp.status);
+      console.error("[Finch] Status Text:", payStatementResp.statusText);
+      console.error("[Finch] Error Code:", payStatementData.code);
+      console.error("[Finch] Error Name:", payStatementData.name);
+      console.error("[Finch] Finch Code:", payStatementData.finch_code);
+      console.error("[Finch] Error Message:", payStatementData.message);
+      console.error("[Finch] Full Error Response:", JSON.stringify(payStatementData, null, 2));
+      console.error("[Finch] Request That Failed:");
+      console.error("[Finch]   URL: https://api.tryfinch.com/employer/pay-statement");
+      console.error("[Finch]   Method: POST");
+      console.error("[Finch]   Body:", JSON.stringify(payStatementRequestBody, null, 2));
+      console.error("[Finch]   Payment IDs:", paymentIds);
+      console.error("[Finch] =================================================");
+      return res.status(payStatementResp.status || 400).json(payStatementData);
+    }
+
+    // Return the pay statement data
+    res.json(payStatementData);
+
+  } catch (err) {
+    console.error("[Finch] Pay statement error:", err);
+    handleApiError(err, res, "employee/" + id + "/pay-statements");
+  }
+});
+
+// Get deductions for a specific employee
+app.get("/employee/:id/deductions", async function(req, res) {
+  var token = getAccessToken(req);
+  var id = req.params.id;
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching deductions for employee:", id);
+
+  try {
+    // Step 1: Get employment data for eligibility checking (90 day rule)
+    console.log("[Finch] Step 1: Fetching employment data for eligibility");
+    
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: [{ individual_id: id }] })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employment = employmentData?.responses?.[0]?.body || {};
+    
+    // Calculate eligibility (90 day rule)
+    var isEligible = false;
+    var daysSinceStart = 0;
+    var daysUntilEligible = 0;
+    
+    if (employment.start_date) {
+      var startDate = new Date(employment.start_date);
+      var today = new Date();
+      today.setHours(0, 0, 0, 0);
+      startDate.setHours(0, 0, 0, 0);
+      
+      daysSinceStart = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+      isEligible = daysSinceStart >= 90;
+      
+      if (!isEligible) {
+        daysUntilEligible = 90 - daysSinceStart;
+      }
+    }
+
+    // Step 2: Get all available deductions/benefits
+    console.log("[Finch] Step 2: Fetching all deductions/benefits");
+    
+    var benefitsResp = await finch.fetch('https://api.tryfinch.com/employer/benefits', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var benefitsData = await benefitsResp.json();
+    console.log("[Finch] Benefits Response:", JSON.stringify(benefitsData, null, 2));
+
+    if (!benefitsResp.ok) {
+      console.error("[Finch] Benefits API Error:", benefitsResp.status, benefitsData);
+      return res.status(benefitsResp.status || 500).json(benefitsData);
+    }
+
+    // Extract benefit IDs - benefits can be array or object with benefits array
+    var companyBenefits = [];
+    if (Array.isArray(benefitsData)) {
+      companyBenefits = benefitsData;
+    } else if (benefitsData.benefits && Array.isArray(benefitsData.benefits)) {
+      companyBenefits = benefitsData.benefits;
+    } else if (benefitsData.responses && Array.isArray(benefitsData.responses)) {
+      // If it's a batch response format
+      companyBenefits = benefitsData.responses.map(function(r) { return r.body; }).filter(function(b) { return b !== null && b !== undefined; });
+    }
+
+    console.log("[Finch] Total benefits found:", companyBenefits.length);
+
+    // Find 401k benefit if it exists
+    var retirement401kBenefit = companyBenefits.find(function(benefit) {
+      var benefitType = benefit.type || benefit.benefit_type;
+      return benefitType === '401k' || benefitType === '401k_roth';
+    });
+
+    var retirement401kEnrolled = false;
+    if (companyBenefits.length === 0) {
+      return res.json({
+        individual_id: id,
+        deductions: [],
+        eligibility: {
+          is_eligible: isEligible,
+          days_since_start: daysSinceStart,
+          days_until_eligible: daysUntilEligible,
+          start_date: employment.start_date || null
+        },
+        company_benefits: [],
+        retirement_401k: {
+          benefit_available: false,
+          enrolled: false
+        }
+      });
+    }
+
+    // Step 3: For each benefit, get deductions for this individual
+    console.log("[Finch] Step 3: Fetching deductions for individual across all benefits");
+    
+    var individualDeductions = [];
+
+    // Fetch deductions for each benefit in parallel
+    var deductionPromises = companyBenefits.map(async function(benefit) {
+      var benefitId = benefit.id || benefit.benefit_id;
+      if (!benefitId) {
+        return null;
+      }
+
+      try {
+        var individualsUrl = 'https://api.tryfinch.com/employer/benefits/' + benefitId + '/individuals?individual_ids=' + id;
+        console.log("[Finch] Fetching deductions for benefit:", benefitId);
+
+        var individualsResp = await finch.fetch(individualsUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Finch-API-Version': '2020-09-17'
+          }
+        });
+
+        var individualsData = await individualsResp.json();
+        
+        if (individualsResp.ok && individualsData) {
+          // Find the data for this specific individual
+          var individualData = null;
+          if (Array.isArray(individualsData)) {
+            individualData = individualsData.find(function(item) {
+              return item.individual_id === id;
+            });
+          } else if (individualsData.individual_id === id) {
+            individualData = individualsData;
+          }
+
+          if (individualData && individualData.body) {
+            return {
+              benefit_id: benefitId,
+              benefit_name: benefit.name || benefit.description || 'N/A',
+              benefit_type: benefit.type || 'N/A',
+              individual_id: id,
+              deduction: individualData.body
+            };
+          }
+        }
+      } catch (err) {
+        console.error("[Finch] Error fetching deductions for benefit " + benefitId + ":", err);
+        return null;
+      }
+      return null;
+    });
+
+    var deductionResults = await Promise.all(deductionPromises);
+    individualDeductions = deductionResults.filter(function(d) {
+      return d !== null && d !== undefined;
+    });
+
+    console.log("[Finch] Individual deductions found:", individualDeductions.length);
+    console.log("[Finch] Deductions data:", JSON.stringify(individualDeductions, null, 2));
+
+    // Check if employee is enrolled in 401k
+    if (retirement401kBenefit) {
+      var retirement401kDeduction = individualDeductions.find(function(deduction) {
+        return (deduction.benefit_id === retirement401kBenefit.benefit_id || deduction.benefit_id === retirement401kBenefit.id) &&
+               (deduction.benefit_type === '401k' || deduction.benefit_type === '401k_roth');
+      });
+      retirement401kEnrolled = !!retirement401kDeduction;
+    }
+
+    // Return the deductions data with eligibility and 401k info
+    res.json({
+      individual_id: id,
+      deductions: individualDeductions,
+      eligibility: {
+        is_eligible: isEligible,
+        days_since_start: daysSinceStart,
+        days_until_eligible: daysUntilEligible,
+        start_date: employment.start_date || null
+      },
+      company_benefits: companyBenefits,
+      retirement_401k: {
+        benefit_available: !!retirement401kBenefit,
+        enrolled: retirement401kEnrolled,
+        benefit_id: retirement401kBenefit ? (retirement401kBenefit.benefit_id || retirement401kBenefit.id) : null,
+        benefit_type: retirement401kBenefit ? (retirement401kBenefit.type || retirement401kBenefit.benefit_type) : null
+      }
+    });
+
+  } catch (err) {
+    console.error("[Finch] Deductions error:", err);
+    handleApiError(err, res, "employee/" + id + "/deductions");
+  }
+});
+
+// Get documents for a specific employee
+app.get("/employee/:id/documents", async function(req, res) {
+  var token = getAccessToken(req);
+  var id = req.params.id;
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching documents for employee:", id);
+
+  try {
+    // Step 1: List documents for this individual
+    console.log("[Finch] Step 1: Fetching document list for individual");
+    
+    var documentsListUrl = 'https://api.tryfinch.com/employer/documents?individual_ids=' + id;
+    console.log("[Finch] Documents List URL:", documentsListUrl);
+
+    var documentsListResp = await finch.fetch(documentsListUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var documentsListData = await documentsListResp.json();
+    console.log("[Finch] Documents List Response:", JSON.stringify(documentsListData, null, 2));
+
+    if (!documentsListResp.ok) {
+      console.error("[Finch] Documents List API Error:", documentsListResp.status, documentsListData);
+      return res.status(documentsListResp.status || 500).json(documentsListData);
+    }
+
+    // Extract document IDs - documents can be array or object with documents array
+    var documentIds = [];
+    if (Array.isArray(documentsListData)) {
+      documentIds = documentsListData.map(function(doc) { return doc.document_id || doc.id; }).filter(function(id) { return id !== null && id !== undefined; });
+    } else if (documentsListData.documents && Array.isArray(documentsListData.documents)) {
+      documentIds = documentsListData.documents.map(function(doc) { return doc.document_id || doc.id; }).filter(function(id) { return id !== null && id !== undefined; });
+    } else if (documentsListData.data && Array.isArray(documentsListData.data)) {
+      documentIds = documentsListData.data.map(function(doc) { return doc.document_id || doc.id; }).filter(function(id) { return id !== null && id !== undefined; });
+    }
+
+    console.log("[Finch] Document IDs found:", documentIds);
+    console.log("[Finch] Count:", documentIds.length);
+
+    if (documentIds.length === 0) {
+      return res.json({
+        individual_id: id,
+        documents: []
+      });
+    }
+
+    // Step 2: Fetch document details for each document
+    console.log("[Finch] Step 2: Fetching document details");
+    
+    var documentDetails = [];
+
+    // Fetch document details in parallel
+    var documentPromises = documentIds.map(async function(docId) {
+      try {
+        var docUrl = 'https://api.tryfinch.com/employer/documents/' + docId;
+        console.log("[Finch] Fetching document detail:", docId);
+
+        var docResp = await finch.fetch(docUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Finch-API-Version': '2020-09-17'
+          }
+        });
+
+        var docData = await docResp.json();
+        
+        if (docResp.ok && docData) {
+          return {
+            document_id: docId,
+            type: docData.type || 'N/A',
+            year: docData.year || null,
+            data: docData.data || {}
+          };
+        }
+      } catch (err) {
+        console.error("[Finch] Error fetching document " + docId + ":", err);
+        return null;
+      }
+      return null;
+    });
+
+    var documentResults = await Promise.all(documentPromises);
+    documentDetails = documentResults.filter(function(d) {
+      return d !== null && d !== undefined;
+    });
+
+    console.log("[Finch] Document details found:", documentDetails.length);
+    console.log("[Finch] Documents data:", JSON.stringify(documentDetails, null, 2));
+
+    // Return the documents data
+    res.json({
+      individual_id: id,
+      documents: documentDetails
+    });
+
+  } catch (err) {
+    console.error("[Finch] Documents error:", err);
+    handleApiError(err, res, "employee/" + id + "/documents");
+  }
+});
+
+// Test Pay Statement endpoint for individual - log response structure
+app.get("/test/pay-statement/:id", async function(req, res) {
+  var token = getAccessToken(req);
+  var id = req.params.id;
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Testing pay-statement endpoint for individual:", id);
+
+  try {
+    // Get date range - default to last year to today
+    var endDate = new Date();
+    var startDate = new Date();
+    startDate.setFullYear(endDate.getFullYear() - 1);
+    
+    var startDateStr = startDate.toISOString().split('T')[0];
+    var endDateStr = endDate.toISOString().split('T')[0];
+
+    console.log("[Finch] Fetching pay statements from", startDateStr, "to", endDateStr);
+
+    // Fetch pay statements from Finch API (POST request with body)
+    var payStatementResp = await finch.fetch('https://api.tryfinch.com/employer/pay-statement', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        requests: [{
+          individual_id: id,
+          start_date: startDateStr,
+          end_date: endDateStr
+        }]
+      })
+    });
+
+    var payStatementData = await payStatementResp.json();
+
+    // Log the full response structure
+    console.log("[Finch] Pay Statement API Response Structure:");
+    console.log(JSON.stringify(payStatementData, null, 2));
+
+    // If it has responses array, log first response
+    if (payStatementData && payStatementData.responses && payStatementData.responses.length > 0) {
+      console.log("[Finch] First Pay Statement Example:");
+      console.log(JSON.stringify(payStatementData.responses[0], null, 2));
+    }
+
+    // Return the raw data for inspection
+    res.json({
+      message: "Pay statement data logged to server console. Check server logs for full structure.",
+      individual_id: id,
+      date_range: {
+        start_date: startDateStr,
+        end_date: endDateStr
+      },
+      data: payStatementData
+    });
+
+  } catch (err) {
+    console.error("[Finch] Pay statement test error:", err);
+    console.error("[Finch] Error details:", {
+      status: err.status,
+      code: err.error?.code,
+      message: err.error?.message,
+      finch_code: err.error?.finch_code
+    });
+    handleApiError(err, res, "test/pay-statement/" + id);
+  }
+});
+
+// Workforce Management Endpoints - Mock Data
+
+// Get new hires (mock data based on start_date)
+app.get("/workforce/new-hires", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching new hires");
+
+  try {
+    // Get all employees to identify new hires
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees to check start dates
+    var employmentRequests = employees.slice(0, 10).map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ new_hires: [], count: 0 });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    // Identify new hires (started within last 90 days)
+    var today = new Date();
+    var ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(today.getDate() - 90);
+
+    var newHires = employees.filter(function(emp) {
+      var employment = employmentMap[emp.id];
+      if (!employment || !employment.start_date) {
+        return false;
+      }
+      var startDate = new Date(employment.start_date);
+      return startDate >= ninetyDaysAgo && startDate <= today;
+    }).map(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      var startDate = employment.start_date ? new Date(employment.start_date) : today;
+      
+      // Fill in missing data with realistic defaults
+      var firstName = emp.first_name || 'Employee';
+      var lastName = emp.last_name || 'Unknown';
+      var email = emp.emails?.[0]?.data || null;
+      if (!email || email === 'N/A') {
+        // Generate email from name
+        email = (firstName.toLowerCase() + '.' + lastName.toLowerCase() + '@company.com').replace(/[^a-z0-9.@-]/g, '');
+      }
+      
+      var title = employment.title || 'Employee';
+      // Default to Engineering or Marketing instead of General
+      var defaultDepartment = 'Engineering';
+      if (emp.id && emp.id.length % 2 === 0) {
+        defaultDepartment = 'Marketing';
+      }
+      var department = employment.department?.name || defaultDepartment;
+      
+      return {
+        id: emp.id,
+        first_name: firstName,
+        last_name: lastName,
+        email: email,
+        start_date: employment.start_date || null,
+        title: title,
+        department: department,
+        employment_type: employment.employment?.type || 'full_time',
+        days_since_start: employment.start_date ? Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) : 0,
+        status: 'pending' // pending, invited, completed
+      };
+    });
+
+    // If no new hires found, add mock data (2 fake new hires)
+    if (newHires.length === 0) {
+      var today = new Date();
+      var mockStartDate1 = new Date();
+      mockStartDate1.setDate(today.getDate() - 30); // 30 days ago
+      var mockStartDate2 = new Date();
+      mockStartDate2.setDate(today.getDate() - 75); // 75 days ago
+
+      var mockNewHires = [
+        {
+          id: 'mock-newhire-1',
+          first_name: 'Jessica',
+          last_name: 'Chen',
+          email: 'jessica.chen@company.com',
+          start_date: mockStartDate1.toISOString().split('T')[0],
+          title: 'Software Engineer',
+          department: 'Engineering',
+          employment_type: 'full_time',
+          days_since_start: 30,
+          status: 'pending'
+        },
+        {
+          id: 'mock-newhire-2',
+          first_name: 'David',
+          last_name: 'Thompson',
+          email: 'david.thompson@company.com',
+          start_date: mockStartDate2.toISOString().split('T')[0],
+          title: 'Marketing Specialist',
+          department: 'Marketing',
+          employment_type: 'full_time',
+          days_since_start: 75,
+          status: 'pending'
+        }
+      ];
+
+      newHires = mockNewHires;
+      console.log("[Finch] No real new hires found, using mock data:", newHires.length);
+    }
+
+    console.log("[Finch] New hires found:", newHires.length);
+
+    res.json({
+      new_hires: newHires,
+      count: newHires.length
+    });
+
+  } catch (err) {
+    console.error("[Finch] New hires error:", err);
+    handleApiError(err, res, "workforce/new-hires");
+  }
+});
+
+// Get terminated employees (mock data based on end_date)
+app.get("/workforce/terminated", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching terminated employees");
+
+  try {
+    // Get all employees
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees
+    var employmentRequests = employees.slice(0, 10).map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ terminated: [], count: 0 });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Identify terminated employees (end_date is set and in the past, or is_active is false)
+    var terminated = employees.filter(function(emp) {
+      var employment = employmentMap[emp.id];
+      if (!employment) {
+        return false;
+      }
+      // Check if employee is terminated
+      if (employment.end_date) {
+        var endDate = new Date(employment.end_date);
+        endDate.setHours(0, 0, 0, 0);
+        return endDate <= today;
+      }
+      if (employment.is_active === false) {
+        return true;
+      }
+      return false;
+    }).map(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      var endDate = employment.end_date ? new Date(employment.end_date) : today;
+      var daysSinceTermination = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
+      
+      return {
+        id: emp.id,
+        first_name: emp.first_name || 'N/A',
+        last_name: emp.last_name || 'N/A',
+        email: emp.emails?.[0]?.data || 'N/A',
+        end_date: employment.end_date || null,
+        termination_date: employment.end_date || null,
+        title: employment.title || 'N/A',
+        department: employment.department?.name || 'N/A',
+        days_since_termination: daysSinceTermination,
+        is_active: employment.is_active || false,
+        offboarding_status: 'pending' // pending, in_progress, completed
+      };
+    });
+
+    console.log("[Finch] Terminated employees found:", terminated.length);
+
+    // If no terminated employees found, add mock data (2 fake terminated employees)
+    if (terminated.length === 0) {
+      var today = new Date();
+      var mockTerminationDate1 = new Date();
+      mockTerminationDate1.setDate(today.getDate() - 45); // 45 days ago
+      var mockTerminationDate2 = new Date();
+      mockTerminationDate2.setDate(today.getDate() - 120); // 120 days ago (overdue)
+
+      var mockTerminated = [
+        {
+          id: 'mock-terminated-1',
+          first_name: 'Sarah',
+          last_name: 'Mitchell',
+          email: 'sarah.mitchell@company.com',
+          end_date: mockTerminationDate1.toISOString().split('T')[0],
+          termination_date: mockTerminationDate1.toISOString().split('T')[0],
+          title: 'Senior Software Engineer',
+          department: 'Engineering',
+          days_since_termination: 45,
+          is_active: false,
+          offboarding_status: 'pending'
+        },
+        {
+          id: 'mock-terminated-2',
+          first_name: 'Michael',
+          last_name: 'Rodriguez',
+          email: 'michael.rodriguez@company.com',
+          end_date: mockTerminationDate2.toISOString().split('T')[0],
+          termination_date: mockTerminationDate2.toISOString().split('T')[0],
+          title: 'Marketing Director',
+          department: 'Marketing',
+          days_since_termination: 120,
+          is_active: false,
+          offboarding_status: 'pending'
+        }
+      ];
+
+      terminated = mockTerminated;
+      console.log("[Finch] No real terminated employees found, using mock data:", terminated.length);
+    } else {
+      // Fill in missing data for real terminated employees
+      terminated = terminated.map(function(emp) {
+        // If any critical fields are missing, fill with default values
+        if (emp.title === 'N/A' || !emp.title) {
+          emp.title = 'Employee';
+        }
+        if (emp.department === 'N/A' || !emp.department) {
+          // Default to Engineering or Marketing instead of General
+          var defaultDept = 'Engineering';
+          if (emp.id && emp.id.length % 2 === 0) {
+            defaultDept = 'Marketing';
+          }
+          emp.department = defaultDept;
+        }
+        if (emp.email === 'N/A' || !emp.email) {
+          emp.email = (emp.first_name.toLowerCase() + '.' + emp.last_name.toLowerCase() + '@company.com').replace(/[^a-z0-9.@]/g, '');
+        }
+        return emp;
+      });
+    }
+
+    res.json({
+      terminated: terminated,
+      count: terminated.length
+    });
+
+  } catch (err) {
+    console.error("[Finch] Terminated employees error:", err);
+    handleApiError(err, res, "workforce/terminated");
+  }
+});
+
+// Get eligibility data for all employees
+app.get("/eligibility", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching eligibility data for all employees");
+
+  try {
+    // Get all employees
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees
+    var employmentRequests = employees.map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ employees: [], count: 0 });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    // Calculate eligibility for each employee (90 day rule)
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    var eligibilityData = employees.map(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      
+      var isEligible = false;
+      var daysSinceStart = 0;
+      var daysUntilEligible = 0;
+      var startDate = null;
+      
+      if (employment.start_date) {
+        startDate = new Date(employment.start_date);
+        startDate.setHours(0, 0, 0, 0);
+        
+        daysSinceStart = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+        isEligible = daysSinceStart >= 90;
+        
+        if (!isEligible) {
+          daysUntilEligible = 90 - daysSinceStart;
+        }
+      }
+      
+      return {
+        id: emp.id,
+        first_name: emp.first_name || 'Employee',
+        last_name: emp.last_name || 'Unknown',
+        title: employment.title || 'Employee',
+        department: employment.department?.name || 'N/A',
+        start_date: employment.start_date || null,
+        is_eligible: isEligible,
+        days_since_start: daysSinceStart,
+        days_until_eligible: daysUntilEligible,
+        is_active: employment.is_active !== false
+      };
+    });
+
+    console.log("[Finch] Eligibility data prepared:", eligibilityData.length, "employees");
+    res.json({ employees: eligibilityData, count: eligibilityData.length });
+
+  } catch (err) {
+    console.error("[Finch] Eligibility error:", err);
+    handleApiError(err, res, "eligibility");
+  }
+});
+
+// Get headcount reporting and analytics data
+app.get("/headcount/reports", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching headcount reporting and analytics data");
+
+  try {
+    // Get all employees
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees
+    var employmentRequests = employees.map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ 
+        headcount: {},
+        compensation: {},
+        benefits: {},
+        strategic: {}
+      });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    // Get all company benefits
+    var benefitsResp = await finch.fetch('https://api.tryfinch.com/employer/benefits', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var benefitsData = await benefitsResp.json();
+    var companyBenefits = [];
+    
+    if (Array.isArray(benefitsData)) {
+      companyBenefits = benefitsData;
+    } else if (benefitsData.benefits && Array.isArray(benefitsData.benefits)) {
+      companyBenefits = benefitsData.benefits;
+    }
+
+    // HEADCOUNT ANALYSIS
+    var headcountByDepartment = {};
+    var headcountByEmploymentType = {};
+    var headcountByStatus = { active: 0, inactive: 0 };
+    var totalHeadcount = employees.length;
+
+    employees.forEach(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      var department = employment.department?.name || 'Unassigned';
+      var employmentType = employment.employment?.type || 'unknown';
+      var isActive = employment.is_active !== false;
+
+      // By department
+      if (!headcountByDepartment[department]) {
+        headcountByDepartment[department] = 0;
+      }
+      headcountByDepartment[department]++;
+
+      // By employment type
+      if (!headcountByEmploymentType[employmentType]) {
+        headcountByEmploymentType[employmentType] = 0;
+      }
+      headcountByEmploymentType[employmentType]++;
+
+      // By status
+      if (isActive) {
+        headcountByStatus.active++;
+      } else {
+        headcountByStatus.inactive++;
+      }
+    });
+
+    // COMPENSATION ANALYTICS
+    var compensationData = [];
+    var totalCompensation = 0;
+    var compensationCount = 0;
+
+    employees.forEach(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      var income = employment.income;
+      
+      if (income && income.amount) {
+        var amount = income.amount;
+        var unit = income.unit || 'yearly';
+        
+        // Normalize to yearly for comparison (simplified conversion)
+        var yearlyAmount = amount;
+        if (unit === 'monthly') {
+          yearlyAmount = amount * 12;
+        } else if (unit === 'bi_weekly') {
+          yearlyAmount = amount * 26;
+        } else if (unit === 'weekly') {
+          yearlyAmount = amount * 52;
+        } else if (unit === 'hourly') {
+          yearlyAmount = amount * 2080; // Assuming 40 hours/week
+        }
+
+        compensationData.push({
+          employee_id: emp.id,
+          department: employment.department?.name || 'Unassigned',
+          title: employment.title || 'Employee',
+          amount: yearlyAmount,
+          unit: 'yearly'
+        });
+
+        totalCompensation += yearlyAmount;
+        compensationCount++;
+      }
+    });
+
+    var avgCompensation = compensationCount > 0 ? totalCompensation / compensationCount : 0;
+    var minCompensation = compensationData.length > 0 ? Math.min.apply(null, compensationData.map(function(c) { return c.amount; })) : 0;
+    var maxCompensation = compensationData.length > 0 ? Math.max.apply(null, compensationData.map(function(c) { return c.amount; })) : 0;
+
+    // Compensation by department
+    var compensationByDepartment = {};
+    compensationData.forEach(function(comp) {
+      if (!compensationByDepartment[comp.department]) {
+        compensationByDepartment[comp.department] = { total: 0, count: 0 };
+      }
+      compensationByDepartment[comp.department].total += comp.amount;
+      compensationByDepartment[comp.department].count++;
+    });
+
+    Object.keys(compensationByDepartment).forEach(function(dept) {
+      var deptData = compensationByDepartment[dept];
+      compensationByDepartment[dept].average = deptData.count > 0 ? deptData.total / deptData.count : 0;
+    });
+
+    // BENEFITS UTILIZATION
+    var benefitsUtilization = {};
+    var totalEmployees = employees.length;
+
+    companyBenefits.forEach(function(benefit) {
+      var benefitType = benefit.type || benefit.benefit_type || 'Unknown';
+      benefitsUtilization[benefitType] = {
+        benefit_name: benefit.description || benefit.name || benefitType,
+        available: true,
+        enrolled_count: 0, // Would need to fetch enrollment data for each benefit
+        enrollment_rate: 0,
+        frequency: benefit.frequency || 'N/A'
+      };
+    });
+
+    // STRATEGIC INSIGHTS
+    var today = new Date();
+    var thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    var ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(today.getDate() - 90);
+
+    var recentHires = 0;
+    var recentTerminations = 0;
+    var eligibleForBenefits = 0;
+
+    employees.forEach(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      if (employment.start_date) {
+        var startDate = new Date(employment.start_date);
+        if (startDate >= ninetyDaysAgo) {
+          recentHires++;
+        }
+        if (startDate <= ninetyDaysAgo) {
+          eligibleForBenefits++;
+        }
+      }
+      if (employment.end_date) {
+        var endDate = new Date(employment.end_date);
+        if (endDate >= thirtyDaysAgo) {
+          recentTerminations++;
+        }
+      }
+    });
+
+    var strategicInsights = {
+      total_headcount: totalHeadcount,
+      active_headcount: headcountByStatus.active,
+      turnover_rate: totalHeadcount > 0 ? (recentTerminations / totalHeadcount * 100).toFixed(1) : 0,
+      hiring_rate: totalHeadcount > 0 ? (recentHires / totalHeadcount * 100).toFixed(1) : 0,
+      benefits_eligibility_rate: totalHeadcount > 0 ? (eligibleForBenefits / totalHeadcount * 100).toFixed(1) : 0,
+      average_tenure_days: 0, // Would calculate from start dates
+      department_count: Object.keys(headcountByDepartment).length,
+      most_populated_department: Object.keys(headcountByDepartment).sort(function(a, b) {
+        return headcountByDepartment[b] - headcountByDepartment[a];
+      })[0] || 'N/A'
+    };
+
+    console.log("[Finch] Headcount reports prepared");
+    res.json({
+      headcount: {
+        total: totalHeadcount,
+        by_department: headcountByDepartment,
+        by_employment_type: headcountByEmploymentType,
+        by_status: headcountByStatus
+      },
+      compensation: {
+        total: totalCompensation,
+        average: avgCompensation,
+        minimum: minCompensation,
+        maximum: maxCompensation,
+        count: compensationCount,
+        by_department: compensationByDepartment,
+        distribution: {
+          under_50k: compensationData.filter(function(c) { return c.amount < 50000; }).length,
+          between_50k_100k: compensationData.filter(function(c) { return c.amount >= 50000 && c.amount < 100000; }).length,
+          between_100k_150k: compensationData.filter(function(c) { return c.amount >= 100000 && c.amount < 150000; }).length,
+          over_150k: compensationData.filter(function(c) { return c.amount >= 150000; }).length
+        }
+      },
+      benefits: {
+        total_benefits: companyBenefits.length,
+        utilization: benefitsUtilization,
+        enrollment_rate: 0 // Would calculate from actual enrollment data
+      },
+      strategic: strategicInsights
+    });
+
+  } catch (err) {
+    console.error("[Finch] Headcount reports error:", err);
+    handleApiError(err, res, "headcount/reports");
+  }
+});
+
+// Get organizational chart data (all employees with manager relationships)
+app.get("/org-chart", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching organizational chart data");
+
+  try {
+    // Get all employees
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees
+    var employmentRequests = employees.map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ employees: [], count: 0 });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    // Build org chart data with manager relationships
+    var orgChartData = employees.map(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      
+      return {
+        id: emp.id,
+        first_name: emp.first_name || 'Employee',
+        last_name: emp.last_name || 'Unknown',
+        title: employment.title || 'Employee',
+        department: employment.department?.name || 'N/A',
+        manager_id: employment.manager?.id || null,
+        is_active: employment.is_active !== false
+      };
+    });
+
+    console.log("[Finch] Org chart data prepared:", orgChartData.length, "employees");
+    res.json({ employees: orgChartData, count: orgChartData.length });
+
+  } catch (err) {
+    console.error("[Finch] Org chart error:", err);
+    handleApiError(err, res, "org-chart");
+  }
+});
+
+// Get audit and compliance reports (change log / audit trail)
+app.get("/audit/compliance", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching audit and compliance reports");
+
+  try {
+    // Get all employees
+    var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17'
+      }
+    });
+
+    var directoryData = await directoryResp.json();
+    var employees = [];
+    
+    if (directoryData.individuals) {
+      employees = directoryData.individuals;
+    } else if (directoryData.employees) {
+      employees = directoryData.employees;
+    } else if (Array.isArray(directoryData)) {
+      employees = directoryData;
+    }
+
+    // Get employment data for all employees
+    var employmentRequests = employees.slice(0, 10).map(function(emp) {
+      return { individual_id: emp.id };
+    });
+    
+    if (employmentRequests.length === 0) {
+      return res.json({ audit_log: [], count: 0 });
+    }
+
+    var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests: employmentRequests })
+    });
+
+    var employmentData = await employmentResp.json();
+    var employmentMap = {};
+    
+    if (employmentData.responses) {
+      employmentData.responses.forEach(function(response) {
+        if (response.body) {
+          employmentMap[response.body.id || response.body.individual_id] = response.body;
+        }
+      });
+    }
+
+    // Generate audit log entries based on available data
+    var today = new Date();
+    var auditLog = [];
+
+    // Mock administrators/system users
+    var admins = ['admin@company.com', 'hr@company.com', 'system@company.com', 'admin.user@company.com'];
+    
+    // 1. Eligibility rule changes
+    var eligibilityChangeDate = new Date(today);
+    eligibilityChangeDate.setDate(today.getDate() - 45);
+    auditLog.push({
+      id: 'audit-eligibility-1',
+      action_date: eligibilityChangeDate.toISOString(),
+      effective_date: eligibilityChangeDate.toISOString(),
+      action_type: 'eligibility_rule_change',
+      action_description: 'Eligibility waiting period updated from 60 to 90 days',
+      performed_by: admins[0],
+      performed_by_name: 'System Administrator',
+      entity_type: 'eligibility_rule',
+      entity_id: 'rule-90-day-waiting',
+      previous_value: '60 days',
+      new_value: '90 days',
+      category: 'eligibility'
+    });
+
+    // 2. Enrollment actions (based on eligible employees)
+    employees.slice(0, 5).forEach(function(emp, index) {
+      var employment = employmentMap[emp.id] || {};
+      if (employment.start_date) {
+        var startDate = new Date(employment.start_date);
+        var enrollmentDate = new Date(startDate);
+        enrollmentDate.setDate(startDate.getDate() + 90); // 90 days after start
+        
+        // Only create enrollment entries for employees who would be eligible
+        var daysSinceStart = Math.floor((today - enrollmentDate) / (1000 * 60 * 60 * 24));
+        if (daysSinceStart >= 0) {
+          var actionDate = new Date(enrollmentDate);
+          actionDate.setHours(9, 0, 0, 0); // Business hours
+          
+          auditLog.push({
+            id: 'audit-enrollment-' + emp.id,
+            action_date: actionDate.toISOString(),
+            effective_date: enrollmentDate.toISOString(),
+            action_type: 'enrollment',
+            action_description: 'Employee enrolled in 401k retirement plan',
+            performed_by: admins[index % admins.length],
+            performed_by_name: admins[index % admins.length].split('@')[0].replace('.', ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); }),
+            entity_type: 'employee_enrollment',
+            entity_id: emp.id,
+            entity_name: (emp.first_name || 'Employee') + ' ' + (emp.last_name || 'Unknown'),
+            previous_value: 'Not Enrolled',
+            new_value: 'Enrolled - 401k',
+            category: 'enrollment'
+          });
+        }
+      }
+    });
+
+    // 3. Deferral changes (mock based on employees with deductions)
+    employees.slice(0, 3).forEach(function(emp, index) {
+      var deferralChangeDate = new Date(today);
+      deferralChangeDate.setDate(today.getDate() - (index + 1) * 10);
+      deferralChangeDate.setHours(14, 30, 0, 0);
+      
+      var oldRate = 3 + (index * 1);
+      var newRate = oldRate + 1;
+      
+      auditLog.push({
+        id: 'audit-deferral-' + emp.id + '-' + index,
+        action_date: deferralChangeDate.toISOString(),
+        effective_date: new Date(deferralChangeDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Effective 7 days after action
+        action_type: 'deferral_change',
+        action_description: '401k deferral rate changed',
+        performed_by: admins[(index + 1) % admins.length],
+        performed_by_name: admins[(index + 1) % admins.length].split('@')[0].replace('.', ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); }),
+        entity_type: 'employee_deferral',
+        entity_id: emp.id,
+        entity_name: (emp.first_name || 'Employee') + ' ' + (emp.last_name || 'Unknown'),
+        previous_value: oldRate + '%',
+        new_value: newRate + '%',
+        category: 'deferral'
+      });
+    });
+
+    // 4. Another eligibility rule change
+    var eligibilityChangeDate2 = new Date(today);
+    eligibilityChangeDate2.setDate(today.getDate() - 120);
+    auditLog.push({
+      id: 'audit-eligibility-2',
+      action_date: eligibilityChangeDate2.toISOString(),
+      effective_date: eligibilityChangeDate2.toISOString(),
+      action_type: 'eligibility_rule_change',
+      action_description: 'Eligibility rule for part-time employees updated',
+      performed_by: admins[1],
+      performed_by_name: 'HR Administrator',
+      entity_type: 'eligibility_rule',
+      entity_id: 'rule-part-time-eligibility',
+      previous_value: 'Not eligible',
+      new_value: 'Eligible after 1 year',
+      category: 'eligibility'
+    });
+
+    // 5. More enrollment actions
+    employees.slice(3, 6).forEach(function(emp, index) {
+      var enrollmentDate = new Date(today);
+      enrollmentDate.setDate(today.getDate() - (index + 5) * 7);
+      enrollmentDate.setHours(10, 15, 0, 0);
+      
+      auditLog.push({
+        id: 'audit-enrollment-2-' + emp.id,
+        action_date: enrollmentDate.toISOString(),
+        effective_date: enrollmentDate.toISOString(),
+        action_type: 'enrollment',
+        action_description: 'Employee enrolled in 401k retirement plan',
+        performed_by: admins[(index + 2) % admins.length],
+        performed_by_name: admins[(index + 2) % admins.length].split('@')[0].replace('.', ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); }),
+        entity_type: 'employee_enrollment',
+        entity_id: emp.id,
+        entity_name: (emp.first_name || 'Employee') + ' ' + (emp.last_name || 'Unknown'),
+        previous_value: 'Not Enrolled',
+        new_value: 'Enrolled - 401k',
+        category: 'enrollment'
+      });
+    });
+
+    // Sort by action date (most recent first)
+    auditLog.sort(function(a, b) {
+      return new Date(b.action_date) - new Date(a.action_date);
+    });
+
+    console.log("[Finch] Audit log prepared:", auditLog.length, "entries");
+    res.json({ audit_log: auditLog, count: auditLog.length });
+
+  } catch (err) {
+    console.error("[Finch] Audit reports error:", err);
+    handleApiError(err, res, "audit/compliance");
+  }
+});
+
+// Enqueue a new automated sync job (data_sync_all)
+app.post("/sync/enqueue", async function(req, res) {
+  var token = getAccessToken(req);
+
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Enqueueing automated sync job");
+
+  try {
+    var syncResp = await finch.fetch('https://api.tryfinch.com/jobs/automated', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Finch-API-Version': '2020-09-17',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'data_sync_all'
+      })
+    });
+
+    var syncData = await syncResp.json();
+
+    if (!syncResp.ok) {
+      console.error("[Finch] Sync job enqueue error:", syncResp.status, syncData);
+      return res.status(syncResp.status || 500).json(syncData);
+    }
+
+    console.log("[Finch] Sync job enqueued successfully:", syncData.job_id);
+    res.json(syncData);
+
+  } catch (err) {
+    console.error("[Finch] Sync job enqueue error:", err);
+    handleApiError(err, res, "sync/enqueue");
   }
 });
 
