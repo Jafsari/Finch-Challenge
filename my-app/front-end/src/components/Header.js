@@ -50,6 +50,13 @@ function Header(props) {
             Organization
           </a>
           <a 
+            href="#orgchart"
+            className={activeRoute === 'orgchart' ? 'active' : ''}
+            onClick={function(e) { handleNavClick(e, 'orgchart'); }}
+          >
+            Org Chart
+          </a>
+          <a 
             href="#payroll"
             className={activeRoute === 'payroll' ? 'active' : ''}
             onClick={function(e) { handleNavClick(e, 'payroll'); }}
@@ -71,6 +78,13 @@ function Header(props) {
             Documents
           </a>
           <a 
+            href="#whatschanged"
+            className={activeRoute === 'whatschanged' ? 'active' : ''}
+            onClick={function(e) { handleNavClick(e, 'whatschanged'); }}
+          >
+            What's Changed
+          </a>
+          <a 
             href="#workforce"
             className={activeRoute === 'workforce' ? 'active' : ''}
             onClick={function(e) { handleNavClick(e, 'workforce'); }}
@@ -83,13 +97,6 @@ function Header(props) {
             onClick={function(e) { handleNavClick(e, 'eligibility'); }}
           >
             Eligibility
-          </a>
-          <a 
-            href="#orgchart"
-            className={activeRoute === 'orgchart' ? 'active' : ''}
-            onClick={function(e) { handleNavClick(e, 'orgchart'); }}
-          >
-            Org Chart
           </a>
           <a 
             href="#analytics"

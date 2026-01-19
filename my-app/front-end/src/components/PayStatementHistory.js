@@ -47,6 +47,7 @@ function PayStatementHistory(props) {
       grossPay: 0,
       netPay: 0,
       totalHours: 0,
+      totalDeductions: 0,
       count: filteredStatements.length
     };
 
@@ -78,6 +79,14 @@ function PayStatementHistory(props) {
       // Handle hours
       if (statement.hours || statement.total_hours) {
         totals.totalHours += (Number(statement.hours || statement.total_hours) || 0);
+      }
+      
+      // Calculate total deductions for this statement
+      if (statement.employee_deductions && Array.isArray(statement.employee_deductions)) {
+        statement.employee_deductions.forEach(function(ded) {
+          var dedAmount = (ded.amount || 0) / 100;
+          totals.totalDeductions += dedAmount;
+        });
       }
     });
 
@@ -127,6 +136,10 @@ function PayStatementHistory(props) {
         <div className="summary-item">
           <span className="summary-label">Total Gross Pay</span>
           <span className="summary-value highlight">{formatCurrency(totals.grossPay * 100, 'USD')}</span>
+        </div>
+        <div className="summary-item">
+          <span className="summary-label">Total Deductions</span>
+          <span className="summary-value">{formatCurrency(totals.totalDeductions * 100, 'USD')}</span>
         </div>
         <div className="summary-item">
           <span className="summary-label">Total Net Pay</span>

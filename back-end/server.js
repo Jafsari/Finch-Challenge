@@ -2202,6 +2202,282 @@ app.post("/sync/enqueue", async function(req, res) {
   }
 });
 
+// Get webhook events (fake data based on real employee data)
+app.get("/webhooks/changes", async function(req, res) {
+  var token = getAccessToken(req);
+  
+  if (!token) {
+    return res.status(401).json({ error: "No access token available" });
+  }
+
+  console.log("[Finch] Fetching webhook events");
+
+  try {
+    // Get all employees to generate realistic events
+    var employees = [];
+    var employmentMap = {};
+    
+    try {
+      var directoryResp = await finch.fetch('https://api.tryfinch.com/employer/directory', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Finch-API-Version': '2020-09-17'
+        }
+      });
+
+      var directoryData = await directoryResp.json();
+      
+      if (directoryData.individuals) {
+        employees = directoryData.individuals;
+      } else if (directoryData.employees) {
+        employees = directoryData.employees;
+      } else if (Array.isArray(directoryData)) {
+        employees = directoryData;
+      }
+
+      // Get employment data for a few employees
+      var sampleEmployees = employees.slice(0, 10);
+      var employmentRequests = sampleEmployees.map(function(emp) {
+        return { individual_id: emp.id };
+      });
+      
+      if (employmentRequests.length > 0) {
+        var employmentResp = await finch.fetch('https://api.tryfinch.com/employer/employment', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Finch-API-Version': '2020-09-17',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ requests: employmentRequests })
+        });
+
+        var employmentData = await employmentResp.json();
+        if (employmentData.responses) {
+          employmentData.responses.forEach(function(response) {
+            if (response.body) {
+              employmentMap[response.body.id || response.body.individual_id] = response.body;
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.log("[Finch] Error fetching employees for webhooks, using mock data:", err.message);
+      // Continue with empty arrays - we'll generate mock events
+    }
+
+    // Generate fake webhook events based on real data - matching exact Finch webhook structure
+    // Reference: https://developer.tryfinch.com/developer-resources/Webhooks
+    var events = [];
+    var now = new Date();
+    var connectionId = '0057d3d2-fb43-4815-9f71-01ba4862d09f';
+    var companyId = '720be419-0293-4d32-a707-32179b0827ab';
+    var accountId = 'fa872170-b49d-4fb5-aa39-fb1515db0925';
+
+    // Helper function to generate UUID
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0;
+        var v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // Helper function to format date as MM-DD-YYYY (as shown in docs)
+    function formatPayDate(date) {
+      var month = (date.getMonth() + 1).toString().padStart(2, '0');
+      var day = date.getDate().toString().padStart(2, '0');
+      var year = date.getFullYear();
+      return month + '-' + day + '-' + year;
+    }
+
+    var eventIndex = 0;
+    var sampleEmployees = employees.slice(0, 10);
+
+    // If no employees, generate some mock employee IDs for events
+    if (sampleEmployees.length === 0) {
+      for (var i = 0; i < 5; i++) {
+        sampleEmployees.push({ id: generateUUID() });
+      }
+    }
+
+    // Generate directory.created events (exact format from docs)
+    // Reference: https://developer.tryfinch.com/developer-resources/Webhooks
+    sampleEmployees.slice(0, 2).forEach(function(emp) {
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'directory.created',
+        data: {
+          individual_id: emp.id
+        },
+        entity_id: emp.id
+      });
+      eventIndex++;
+    });
+
+    // Generate directory.updated events
+    sampleEmployees.slice(2, 4).forEach(function(emp) {
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'directory.updated',
+        data: {
+          individual_id: emp.id
+        },
+        entity_id: emp.id
+      });
+      eventIndex++;
+    });
+
+    // Generate employment.created events (exact format from docs)
+    sampleEmployees.slice(0, 2).forEach(function(emp) {
+      var employment = employmentMap[emp.id];
+      if (employment) {
+        var employmentEntityId = employment.id || generateUUID();
+        events.push({
+          company_id: companyId,
+          account_id: accountId,
+          connection_id: connectionId,
+          event_type: 'employment.created',
+          data: {
+            individual_id: emp.id
+          },
+          entity_id: employmentEntityId
+        });
+        eventIndex++;
+      }
+    });
+
+    // Generate employment.updated events
+    sampleEmployees.slice(2, 4).forEach(function(emp) {
+      var employment = employmentMap[emp.id];
+      if (employment) {
+        var employmentEntityId = employment.id || generateUUID();
+        events.push({
+          company_id: companyId,
+          account_id: accountId,
+          connection_id: connectionId,
+          event_type: 'employment.updated',
+          data: {
+            individual_id: emp.id
+          },
+          entity_id: employmentEntityId
+        });
+        eventIndex++;
+      }
+    });
+
+    // Generate individual.updated events (exact format from docs)
+    sampleEmployees.slice(0, 3).forEach(function(emp) {
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'individual.updated',
+        data: {
+          individual_id: emp.id
+        },
+        entity_id: emp.id
+      });
+      eventIndex++;
+    });
+
+    // Generate payment.created events (exact format from docs - pay_date as MM-DD-YYYY)
+    sampleEmployees.slice(0, 3).forEach(function(emp) {
+      var payDate = new Date(now.getTime() - (eventIndex * 7 * 24 * 60 * 60 * 1000));
+      var paymentId = generateUUID();
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'payment.created',
+        data: {
+          payment_id: paymentId,
+          pay_date: formatPayDate(payDate)
+        },
+        entity_id: paymentId
+      });
+      eventIndex++;
+    });
+
+    // Generate pay_statement.created events (exact format from docs)
+    sampleEmployees.slice(0, 4).forEach(function(emp) {
+      var paymentId = generateUUID();
+      var payStatementEntityId = generateUUID();
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'pay_statement.created',
+        data: {
+          payment_id: paymentId,
+          individual_id: emp.id
+        },
+        entity_id: payStatementEntityId
+      });
+      eventIndex++;
+    });
+
+    // Generate job.data_sync_all.completed event (exact format from docs)
+    var jobId = generateUUID();
+    events.push({
+      company_id: companyId,
+      account_id: accountId,
+      connection_id: connectionId,
+      event_type: 'job.data_sync_all.completed',
+      data: {
+        job_id: jobId
+      },
+      entity_id: jobId
+    });
+    eventIndex++;
+
+    // Generate account.updated event (exact format from docs)
+    events.push({
+      company_id: companyId,
+      account_id: accountId,
+      connection_id: connectionId,
+      event_type: 'account.updated',
+      data: {
+        status: 'connected',
+        authentication_method: 'oauth'
+      },
+      entity_id: connectionId
+    });
+
+    // Events are already in reverse chronological order (newest first)
+    // No timestamp field in webhook payload per docs, so we keep the order as generated
+
+    // Ensure we always have at least some events
+    if (events.length === 0) {
+      // Generate at least one mock event if no real data
+      events.push({
+        company_id: companyId,
+        account_id: accountId,
+        connection_id: connectionId,
+        event_type: 'account.updated',
+        data: {
+          status: 'connected',
+          authentication_method: 'oauth'
+        },
+        entity_id: connectionId
+      });
+    }
+
+    console.log("[Finch] Generated", events.length, "webhook events");
+    console.log("[Finch] Sample event:", JSON.stringify(events[0], null, 2));
+    res.json({ events: events, count: events.length });
+
+  } catch (err) {
+    console.error("[Finch] Webhook events error:", err);
+    handleApiError(err, res, "webhooks/changes");
+  }
+});
+
 // Start server
 
 app.listen(PORT, function() {

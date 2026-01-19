@@ -47,8 +47,6 @@ function SyncStatus(props) {
         return syncTimes.analytics;
       case 'audit':
         return syncTimes.audit;
-      case 'sync':
-        return syncTimes.sync;
       default:
         return null;
     }
@@ -63,8 +61,7 @@ function SyncStatus(props) {
     { label: 'Eligibility', time: syncTimes.eligibility, route: 'eligibility' },
     { label: 'Org Chart', time: syncTimes.orgchart, route: 'orgchart' },
     { label: 'Analytics', time: syncTimes.analytics, route: 'analytics' },
-    { label: 'Audit', time: syncTimes.audit, route: 'audit' },
-    { label: 'Enforce Sync', time: syncTimes.sync, route: 'sync' }
+    { label: 'Audit', time: syncTimes.audit, route: 'audit' }
   ];
 
   var currentSyncTime = getCurrentRouteSyncTime();

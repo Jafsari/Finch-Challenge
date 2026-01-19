@@ -21,6 +21,7 @@ import OrgChart from "./components/OrgChart";
 import EligibilityInfo from "./components/EligibilityInfo";
 import HeadcountReports from "./components/HeadcountReports";
 import AuditReports from "./components/AuditReports";
+import WhatsChanged from "./components/WhatsChanged";
 
 // Main app component - handles Finch Connect flow and data display
 function MainApp() {
@@ -549,7 +550,7 @@ function MainApp() {
   useEffect(function() {
     function handleHashChange() {
       var hash = window.location.hash.replace('#', '');
-      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'sync') {
+      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'whatschanged' || hash === 'sync') {
         setActiveRoute(hash);
       }
     }
@@ -745,6 +746,15 @@ function MainApp() {
               <AuditReports 
                 loading={loading}
                 error={error}
+              />
+            )}
+
+            {/* What's Changed Route - Webhook Events */}
+            {activeRoute === 'whatschanged' && (
+              <WhatsChanged 
+                loading={loading}
+                error={error}
+                syncTimes={syncTimes}
               />
             )}
           </div>
