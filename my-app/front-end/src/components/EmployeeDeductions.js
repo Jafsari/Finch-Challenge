@@ -23,7 +23,12 @@ function EmployeeDeductions(props) {
   };
 
   if (loading) {
-    return <div className="employee-deductions-loading">Loading deductions...</div>;
+    return (
+      <div className="data-loading-overlay">
+        <div className="loading-spinner"></div>
+        <p>Loading deductions...</p>
+      </div>
+    );
   }
 
   if (deductions.length === 0) {

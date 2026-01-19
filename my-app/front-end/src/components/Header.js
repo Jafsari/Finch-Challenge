@@ -26,7 +26,21 @@ function Header(props) {
   return (
     <header className="app-header">
       <div className="header-content">
-        <div className="logo">Finch Interest</div>
+        <div className="logo">
+          <div className="finch-logo">
+            <svg className="finch-logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 20C8 12 12 8 20 8C24 8 28 10 30 14C30 10 34 8 38 8C42 8 46 12 46 20C46 24 44 28 40 30" stroke="url(#logoGradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <path d="M8 30C8 38 12 42 20 42C24 42 28 40 30 36C30 40 34 42 38 42C42 42 46 38 46 30C46 26 44 22 40 20" stroke="url(#logoGradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <defs>
+                <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style={{stopColor: '#00A37F', stopOpacity: 1}} />
+                  <stop offset="100%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span className="finch-logo-text"><span className="finch-black">Finch</span> <span className="interest-gradient">Interest</span></span>
+          </div>
+        </div>
         <nav className="nav-links">
           <a 
             href="#organization" 

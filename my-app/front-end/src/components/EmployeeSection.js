@@ -7,6 +7,7 @@ function EmployeeSection(props) {
   var employees = props.employees;
   var selectedEmployee = props.selectedEmployee;
   var onEmployeeClick = props.onEmployeeClick;
+  var loading = props.loading || false;
   
   if (!employees || employees.length === 0) {
     return null;
@@ -18,7 +19,7 @@ function EmployeeSection(props) {
         employees={employees} 
         onEmployeeClick={onEmployeeClick} 
       />
-      <EmployeeDetails selectedEmployee={selectedEmployee} />
+      <EmployeeDetails selectedEmployee={selectedEmployee} loading={loading} />
     </div>
   );
 }

@@ -82,6 +82,7 @@ function HeadcountReports(props) {
   var compensation = reportsData.compensation || {};
   var benefits = reportsData.benefits || {};
   var strategic = reportsData.strategic || {};
+  var participationFunnel = reportsData.participation_funnel || {};
 
   return (
     <div id="headcount" className="headcount-reports-section">
@@ -369,6 +370,211 @@ function HeadcountReports(props) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Participation Funnel */}
+      {participationFunnel && participationFunnel.eligible_employees !== undefined && (
+        <div className="info-card" style={{ marginBottom: '2rem' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: '#1a1a1a' }}>Participation Funnel</h3>
+          
+          {/* Demo Moment / Insight */}
+          {participationFunnel.enrollment_rate && participationFunnel.contribution_rate && (
+            <div style={{
+              padding: '1.25rem',
+              backgroundColor: 'linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%)',
+              background: 'linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%)',
+              borderRadius: '12px',
+              border: '2px solid #fbbf24',
+              marginBottom: '2rem',
+              boxShadow: '0 2px 8px rgba(251, 191, 36, 0.2)'
+            }}>
+              <div style={{
+                fontSize: '1rem',
+                fontWeight: '600',
+                color: '#92400e',
+                marginBottom: '0.5rem'
+              }}>
+                💡 Insight
+              </div>
+              <div style={{
+                fontSize: '1.125rem',
+                color: '#78350f',
+                lineHeight: '1.6'
+              }}>
+                You have <strong>{participationFunnel.enrollment_rate}%</strong> enrollment, but only <strong>{participationFunnel.contribution_rate}%</strong> are actually contributing.
+              </div>
+            </div>
+          )}
+          
+          {/* Funnel Visualization */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            {/* Eligible Employees */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+              borderRadius: '12px',
+              border: '2px solid #3b82f6',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem'
+              }}>
+                <span style={{
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#1e40af'
+                }}>
+                  Eligible Employees
+                </span>
+                <span style={{
+                  fontSize: '1.5rem',
+                  fontWeight: '700',
+                  color: '#1e40af'
+                }}>
+                  {participationFunnel.eligible_employees || 0}
+                </span>
+              </div>
+              <div style={{
+                fontSize: '0.875rem',
+                color: '#1e3a8a'
+              }}>
+                Employees with 90+ days of service
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%)'
+              }}></div>
+            </div>
+
+            {/* Enrolled Employees */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+              borderRadius: '12px',
+              border: '2px solid #10b981',
+              position: 'relative',
+              overflow: 'hidden',
+              width: participationFunnel.eligible_employees > 0 ? 
+                Math.max(50, ((participationFunnel.enrolled_employees / participationFunnel.eligible_employees) * 100)) + '%' : '100%',
+              transition: 'width 0.3s ease'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem'
+              }}>
+                <span style={{
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#065f46'
+                }}>
+                  Enrolled Employees
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{
+                    fontSize: '1.25rem',
+                    fontWeight: '600',
+                    color: '#047857'
+                  }}>
+                    {participationFunnel.enrollment_rate || 0}%
+                  </span>
+                  <span style={{
+                    fontSize: '1.5rem',
+                    fontWeight: '700',
+                    color: '#065f46'
+                  }}>
+                    {participationFunnel.enrolled_employees || 0}
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                fontSize: '0.875rem',
+                color: '#064e3b'
+              }}>
+                Employees enrolled in 401k plan
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                background: 'linear-gradient(90deg, #10b981 0%, #34d399 100%)'
+              }}></div>
+            </div>
+
+            {/* Active Contributors */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+              borderRadius: '12px',
+              border: '2px solid #f59e0b',
+              position: 'relative',
+              overflow: 'hidden',
+              width: participationFunnel.enrolled_employees > 0 ? 
+                Math.max(40, ((participationFunnel.active_contributors / participationFunnel.enrolled_employees) * 100)) + '%' : '100%',
+              transition: 'width 0.3s ease'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem'
+              }}>
+                <span style={{
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#92400e'
+                }}>
+                  Active Contributors
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{
+                    fontSize: '1.25rem',
+                    fontWeight: '600',
+                    color: '#b45309'
+                  }}>
+                    {participationFunnel.contribution_rate || 0}%
+                  </span>
+                  <span style={{
+                    fontSize: '1.5rem',
+                    fontWeight: '700',
+                    color: '#92400e'
+                  }}>
+                    {participationFunnel.active_contributors || 0}
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                fontSize: '0.875rem',
+                color: '#78350f'
+              }}>
+                Enrolled employees with active deductions (deductions &gt; 0)
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                background: 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)'
+              }}></div>
+            </div>
+          </div>
         </div>
       )}
 

@@ -3,6 +3,16 @@ import React from 'react';
 // Employee details display
 function EmployeeDetails(props) {
   var selectedEmployee = props.selectedEmployee;
+  var loading = props.loading || false;
+  
+  if (loading && !selectedEmployee) {
+    return (
+      <div className="data-loading-overlay">
+        <div className="loading-spinner"></div>
+        <p>Loading employee information...</p>
+      </div>
+    );
+  }
   
   // Helper function to format income amount
   function formatCurrencyAmount(amount, unit, currency) {

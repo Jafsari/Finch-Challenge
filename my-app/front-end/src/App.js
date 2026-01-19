@@ -40,6 +40,9 @@ function MainApp() {
   var terminatedEmployeesState = useState([]);
   var activeRouteState = useState('organization');
   var loadingState = useState(false);
+  var payrollLoadingState = useState(false);
+  var deductionsLoadingState = useState(false);
+  var employeeDetailsLoadingState = useState(false);
   var errorState = useState(null);
   var syncTimesState = useState({});
   
@@ -73,6 +76,12 @@ function MainApp() {
   var setActiveRoute = activeRouteState[1];
   var loading = loadingState[0];
   var setLoading = loadingState[1];
+  var payrollLoading = payrollLoadingState[0];
+  var setPayrollLoading = payrollLoadingState[1];
+  var deductionsLoading = deductionsLoadingState[0];
+  var setDeductionsLoading = deductionsLoadingState[1];
+  var employeeDetailsLoading = employeeDetailsLoadingState[0];
+  var setEmployeeDetailsLoading = employeeDetailsLoadingState[1];
   var error = errorState[0];
   var setError = errorState[1];
   var syncTimes = syncTimesState[0];
@@ -190,11 +199,15 @@ function MainApp() {
       clearTimeout(debounceTimer.current);
     }
     
+    // Set loading state
+    setEmployeeDetailsLoading(true);
+    
     // Set new timer
     debounceTimer.current = setTimeout(function() {
       axios.get("http://localhost:4000/employee/" + id)
         .then(function(res) {
           setSelectedEmployee(res.data);
+          setEmployeeDetailsLoading(false);
         })
         .catch(function(err) {
           const errorMessage = err.response?.data?.error || "Failed to fetch employee data";
@@ -203,6 +216,7 @@ function MainApp() {
             type: 'employee_details',
             canRetry: false
           });
+          setEmployeeDetailsLoading(false);
         });
     }, 300); // 300ms delay
   }
@@ -222,6 +236,9 @@ function MainApp() {
       return emp.id === id;
     });
     setSelectedPayrollEmployee(employee);
+    
+    // Set loading state
+    setPayrollLoading(true);
     
     // Set new timer to fetch pay statements
     payrollDebounceTimer.current = setTimeout(function() {
@@ -373,6 +390,7 @@ function MainApp() {
           console.log("[Frontend] First statement sample:", statements.length > 0 ? statements[0] : 'No statements');
           
           setPayStatements(statements);
+          setPayrollLoading(false);
           // Sync times are set once at login and never change
         })
         .catch(function(err) {
@@ -383,6 +401,7 @@ function MainApp() {
             canRetry: false
           });
           setPayStatements([]);
+          setPayrollLoading(false);
         });
     }, 300); // 300ms delay
   }
@@ -404,6 +423,9 @@ function MainApp() {
       return emp.id === id;
     });
     setSelectedDeductionsEmployee(employee);
+    
+    // Set loading state
+    setDeductionsLoading(true);
     
     // Set new timer to fetch deductions
     deductionsDebounceTimer.current = setTimeout(function() {
@@ -435,6 +457,7 @@ function MainApp() {
             setRetirement401k(res.data.retirement_401k);
           }
           
+          setDeductionsLoading(false);
           // Sync times are set once at login and never change
         })
         .catch(function(err) {
@@ -447,6 +470,7 @@ function MainApp() {
           setEmployeeDeductions([]);
           setEligibilityData(null);
           setRetirement401k(null);
+          setDeductionsLoading(false);
         });
     }, 300); // 300ms delay
   }
@@ -630,6 +654,7 @@ function MainApp() {
           employees={employees}
           selectedEmployee={selectedEmployee}
           onEmployeeClick={handleEmployeeClick}
+          loading={employeeDetailsLoading}
         />
               </>
             )}
@@ -641,7 +666,7 @@ function MainApp() {
                 selectedPayrollEmployee={selectedPayrollEmployee}
                 payStatements={payStatements}
                 onEmployeeClick={handlePayrollEmployeeClick}
-                loading={loading}
+                loading={payrollLoading}
                 error={error}
               />
             )}
@@ -655,7 +680,7 @@ function MainApp() {
                 eligibilityData={eligibilityData}
                 retirement401k={retirement401k}
                 onEmployeeClick={handleDeductionsEmployeeClick}
-                loading={loading}
+                loading={deductionsLoading}
                 error={error}
               />
             )}

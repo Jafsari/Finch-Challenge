@@ -243,26 +243,20 @@ app.get("/company", function(req, res) {
   var authed = createAuthenticatedClient(token);
   authed.hris.company.retrieve()
     .then(function(companyResp) {
-      // Extract company data
+      // Extract company data - return ALL fields from the response
       var company;
       if (companyResp.data) {
         company = companyResp.data;
+      } else if (companyResp.company) {
+        company = companyResp.company;
       } else {
         company = companyResp;
       }
       
-      var companyName = "";
-      var companyWebsite = "";
+      console.log("[Finch] Full company data:", JSON.stringify(company, null, 2));
       
-      if (company) {
-        companyName = company.legal_name || company.name || "";
-        companyWebsite = company.primary_email || company.website || "";
-      }
-      
-      res.json({
-        name: companyName,
-        website: companyWebsite,
-      });
+      // Return the full company object so all fields are available
+      res.json(company || {});
     })
     .catch(function(err) {
       handleApiError(err, res, "company");
@@ -1680,6 +1674,115 @@ app.get("/headcount/reports", async function(req, res) {
       compensationByDepartment[dept].average = deptData.count > 0 ? deptData.total / deptData.count : 0;
     });
 
+    // PARTICIPATION FUNNEL - Calculate eligible, enrolled, and active contributors
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var eligibleCount = 0;
+    var enrolledCount = 0;
+    var activeContributorsCount = 0;
+    
+    // Find 401k benefit ID
+    var retirement401kBenefit = companyBenefits.find(function(benefit) {
+      var benefitType = benefit.type || benefit.benefit_type;
+      return benefitType === '401k' || benefitType === '401k_roth';
+    });
+    
+    var retirement401kBenefitId = retirement401kBenefit ? (retirement401kBenefit.benefit_id || retirement401kBenefit.id) : null;
+    
+    // Get deductions for all employees to check enrollment and contributions
+    var deductionPromises = employees.slice(0, 20).map(function(emp) {
+      return finch.fetch('https://api.tryfinch.com/employer/deductions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Finch-API-Version': '2020-09-17',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          requests: [{ individual_id: emp.id }] 
+        })
+      }).then(function(resp) {
+        return resp.json().then(function(data) {
+          return { employeeId: emp.id, deductionsData: data };
+        });
+      }).catch(function(err) {
+        return { employeeId: emp.id, deductionsData: null };
+      });
+    });
+    
+    var deductionsResults = await Promise.all(deductionPromises);
+    var enrollmentMap = {};
+    var contributorMap = {};
+    
+    deductionsResults.forEach(function(result) {
+      if (result.deductionsData) {
+        var deductions = [];
+        if (Array.isArray(result.deductionsData)) {
+          deductions = result.deductionsData;
+        } else if (result.deductionsData.responses) {
+          deductions = result.deductionsData.responses.map(function(r) {
+            return r.body;
+          }).filter(function(d) { return d !== null && d !== undefined; });
+        } else if (result.deductionsData.deductions) {
+          deductions = result.deductionsData.deductions;
+        }
+        
+        var has401kDeduction = deductions.some(function(ded) {
+          var dedBenefitId = ded.benefit_id || ded.benefit?.id;
+          var dedType = ded.benefit_type || ded.benefit?.type;
+          return (dedBenefitId === retirement401kBenefitId || dedType === '401k' || dedType === '401k_roth') &&
+                 (ded.deduction?.employee_deduction?.amount > 0 || ded.employee_deduction?.amount > 0);
+        });
+        
+        if (has401kDeduction) {
+          enrollmentMap[result.employeeId] = true;
+          
+          // Check if they have actual deductions > 0
+          var hasActiveContribution = deductions.some(function(ded) {
+            var employeeDed = ded.deduction?.employee_deduction || ded.employee_deduction || {};
+            var amount = employeeDed.amount || 0;
+            return amount > 0;
+          });
+          
+          if (hasActiveContribution) {
+            contributorMap[result.employeeId] = true;
+          }
+        }
+      }
+    });
+    
+    // Calculate eligible employees (90+ days since start)
+    employees.forEach(function(emp) {
+      var employment = employmentMap[emp.id] || {};
+      if (employment.start_date) {
+        var startDate = new Date(employment.start_date);
+        startDate.setHours(0, 0, 0, 0);
+        var daysSinceStart = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+        
+        if (daysSinceStart >= 90) {
+          eligibleCount++;
+          
+          // Check if enrolled
+          if (enrollmentMap[emp.id]) {
+            enrolledCount++;
+            
+            // Check if active contributor
+            if (contributorMap[emp.id]) {
+              activeContributorsCount++;
+            }
+          }
+        }
+      }
+    });
+    
+    var participationFunnel = {
+      eligible_employees: eligibleCount,
+      enrolled_employees: enrolledCount,
+      active_contributors: activeContributorsCount,
+      enrollment_rate: eligibleCount > 0 ? ((enrolledCount / eligibleCount) * 100).toFixed(1) : 0,
+      contribution_rate: enrolledCount > 0 ? ((activeContributorsCount / enrolledCount) * 100).toFixed(1) : 0
+    };
+
     // BENEFITS UTILIZATION
     var benefitsUtilization = {};
     var totalEmployees = employees.length;
@@ -1765,7 +1868,8 @@ app.get("/headcount/reports", async function(req, res) {
         utilization: benefitsUtilization,
         enrollment_rate: 0 // Would calculate from actual enrollment data
       },
-      strategic: strategicInsights
+      strategic: strategicInsights,
+      participation_funnel: participationFunnel
     });
 
   } catch (err) {

@@ -95,7 +95,12 @@ function PayStatementHistory(props) {
   };
 
   if (loading) {
-    return <div className="pay-statement-loading">Loading pay statements...</div>;
+    return (
+      <div className="data-loading-overlay">
+        <div className="loading-spinner"></div>
+        <p>Loading pay statements...</p>
+      </div>
+    );
   }
 
   if (filteredStatements.length === 0) {
