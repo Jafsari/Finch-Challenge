@@ -70,12 +70,14 @@ function Integrations(props) {
           />
         );
       case 'paycom':
-        // Paycom logo - SVG with brand colors
+        // Paycom logo - using official logo image
         return (
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="paycom-logo">
-            <rect width="48" height="48" rx="10" fill="#1E88E5"/>
-            <text x="24" y="28" fontFamily="Arial, sans-serif" fontSize="10" fontWeight="700" fill="white" textAnchor="middle" letterSpacing="0.5px">PAYCOM</text>
-          </svg>
+          <img 
+            src="/paycom-logo.png" 
+            alt="Paycom" 
+            className="paycom-logo"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
         );
       case 'justworks':
         // Justworks - Blue brand color #4A90E2
