@@ -23,7 +23,10 @@ function DeductionsInfo(props) {
   return (
     <div id="deductions" className="deductions-section">
       <div className="info-card">
-        <h2>Deductions Information</h2>
+        <div className="deductions-page-header">
+          <h2>Deductions</h2>
+          <p className="deductions-page-description">View and manage employee benefit deductions, eligibility status, and retirement plan contributions.</p>
+        </div>
         <div className="info-card-content">
           {employees.length > 0 ? (
             <div className="deductions-layout">

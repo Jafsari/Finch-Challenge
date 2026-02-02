@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { useFinchConnect } from "@tryfinch/react-connect";
 import "./App.css";
 
 // Components
@@ -16,7 +17,6 @@ import WorkforceInfo from "./components/WorkforceInfo";
 import EmployeeSection from "./components/EmployeeSection";
 import Footer from "./components/Footer";
 import SyncStatus from "./components/SyncStatus";
-import EnforceSync from "./components/EnforceSync";
 import OrgChart from "./components/OrgChart";
 import EligibilityInfo from "./components/EligibilityInfo";
 import HeadcountReports from "./components/HeadcountReports";
@@ -87,9 +87,30 @@ function MainApp() {
   var setError = errorState[1];
   var syncTimes = syncTimesState[0];
   var setSyncTimes = syncTimesState[1];
+  var successMessageState = useState(null);
+  var successMessage = successMessageState[0];
+  var setSuccessMessage = successMessageState[1];
+  var selectedEmployerState = useState('justin-test');
+  var selectedEmployer = selectedEmployerState[0];
+  var setSelectedEmployer = selectedEmployerState[1];
   
   // Debounce timer ref
   var debounceTimer = useRef(null);
+
+  // Initialize Finch Connect SDK (uses built-in modal)
+  var { open: openFinchConnect } = useFinchConnect({
+    onSuccess: function({ code, state }) {
+      console.log('[App] Finch Connect success - code received');
+      handleFinchConnectSuccess({ code, state });
+    },
+    onError: function({ errorMessage, errorType }) {
+      console.error('[App] Finch Connect error:', errorMessage, errorType);
+      handleFinchConnectError({ errorMessage, errorType });
+    },
+    onClose: function() {
+      console.log('[App] Finch Connect modal closed');
+    }
+  });
   var payrollDebounceTimer = useRef(null);
   var deductionsDebounceTimer = useRef(null);
   var documentsDebounceTimer = useRef(null);
@@ -101,12 +122,16 @@ function MainApp() {
       setError(null);
       
       // Get company info
-      axios.get("http://localhost:4000/company")
+      axios.get("http://localhost:4000/company", {
+        params: { employer: selectedEmployer }
+      })
         .then(function(companyRes) {
           setCompany(companyRes.data);
           
           // Get employee list
-          return axios.get("http://localhost:4000/directory");
+          return axios.get("http://localhost:4000/directory", {
+            params: { employer: selectedEmployer }
+          });
         })
         .then(function(directoryRes) {
           var employeeData;
@@ -159,38 +184,78 @@ function MainApp() {
     });
   }
 
-  // Listen for Finch Connect completion message
-  useEffect(function() {
-    function onMessage(e) {
-      if (e && e.data && e.data.type === "finch:connected") {
-        fetchAfterConnect();
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return function() {
-      window.removeEventListener("message", onMessage);
-    };
-  }, []);
-
-  // Start Finch Connect flow
+  // Start Finch Connect flow - uses SDK's built-in modal
   function connectFinchReal() {
-    // Create session and get connect URL
+    console.log('[App] Starting Finch Connect flow');
+    
+    // Create session and open Finch's built-in modal
     axios.post("http://localhost:4000/create_link_token")
       .then(function(res) {
-        var connectUrl = res.data.connect_url;
+        var sessionId = res.data.session_id;
+        console.log('[App] Session created, opening Finch Connect modal:', sessionId);
         
-        // Open popup window
-        var finchWindow = window.open(connectUrl, "_blank", "width=500,height=700");
-        // Popup will postMessage back when done
+        if (sessionId && openFinchConnect) {
+          openFinchConnect({ sessionId: sessionId });
+        }
       })
       .catch(function(err) {
-        const errorMessage = err.response?.data?.error || "Failed to start Finch Connect";
+        console.error('[App] Failed to create session:', err);
+        var errorMessage = err.response?.data?.error || 'Failed to start Finch Connect';
         setError({
           message: errorMessage,
           type: 'connect',
           canRetry: true
         });
       });
+  }
+
+  // Handle Finch Connect success
+  function handleFinchConnectSuccess(data) {
+    console.log('[App] Finch Connect success:', data);
+    var code = data.code;
+    
+    if (!code) {
+      console.error('[App] No authorization code received');
+      setError({
+        message: 'Failed to receive authorization code',
+        type: 'connect',
+        canRetry: true
+      });
+      return;
+    }
+
+    // Exchange code for access token
+    console.log('[App] Exchanging authorization code for access token...');
+    axios.post("http://localhost:4000/finch/exchange-code", { code: code })
+      .then(function(res) {
+        console.log('[App] Token exchange successful');
+        setSuccessMessage('Successfully connected to your payroll provider!');
+        // Clear success message after 5 seconds
+        setTimeout(function() {
+          setSuccessMessage(null);
+        }, 5000);
+        // Fetch data after successful connection
+        fetchAfterConnect();
+      })
+      .catch(function(err) {
+        console.error('[App] Token exchange failed:', err);
+        var errorMessage = err.response?.data?.error || 'Failed to complete connection';
+        setError({
+          message: errorMessage,
+          type: 'connect',
+          canRetry: true
+        });
+      });
+  }
+
+  // Handle Finch Connect error
+  function handleFinchConnectError(errorData) {
+    console.error('[App] Finch Connect error:', errorData);
+    setError({
+      message: errorData.errorMessage || 'Failed to connect with Finch',
+      type: 'connect',
+      canRetry: true
+    });
   }
 
   // Handle employee selection with debouncing
@@ -205,7 +270,9 @@ function MainApp() {
     
     // Set new timer
     debounceTimer.current = setTimeout(function() {
-      axios.get("http://localhost:4000/employee/" + id)
+      axios.get("http://localhost:4000/employee/" + id, {
+        params: { employer: selectedEmployer }
+      })
         .then(function(res) {
           setSelectedEmployee(res.data);
           setEmployeeDetailsLoading(false);
@@ -243,7 +310,9 @@ function MainApp() {
     
     // Set new timer to fetch pay statements
     payrollDebounceTimer.current = setTimeout(function() {
-      axios.get("http://localhost:4000/employee/" + id + "/pay-statements")
+      axios.get("http://localhost:4000/employee/" + id + "/pay-statements", {
+        params: { employer: selectedEmployer }
+      })
         .then(function(res) {
           // Extract pay statements from response structure
           var statements = [];
@@ -430,7 +499,9 @@ function MainApp() {
     
     // Set new timer to fetch deductions
     deductionsDebounceTimer.current = setTimeout(function() {
-      axios.get("http://localhost:4000/employee/" + id + "/deductions")
+      axios.get("http://localhost:4000/employee/" + id + "/deductions", {
+        params: { employer: selectedEmployer }
+      })
         .then(function(res) {
           // Extract deductions from response
           var deductions = [];
@@ -494,7 +565,9 @@ function MainApp() {
     
     // Set new timer to fetch documents
     documentsDebounceTimer.current = setTimeout(function() {
-      axios.get("http://localhost:4000/employee/" + id + "/documents")
+      axios.get("http://localhost:4000/employee/" + id + "/documents", {
+        params: { employer: selectedEmployer }
+      })
         .then(function(res) {
           // Extract documents from response
           var documents = [];
@@ -550,7 +623,7 @@ function MainApp() {
   useEffect(function() {
     function handleHashChange() {
       var hash = window.location.hash.replace('#', '');
-      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'whatschanged' || hash === 'sync') {
+      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'whatschanged') {
         setActiveRoute(hash);
       }
     }
@@ -593,14 +666,84 @@ function MainApp() {
     }
   }, [activeRoute, company, employees.length]);
 
+  // Handle employer change
+  function handleEmployerChange(employerId) {
+    console.log('[App] Switching employer to:', employerId);
+    setSelectedEmployer(employerId);
+    // Refetch data for the new employer
+    setLoading(true);
+    setError(null);
+    
+    // Get company info for new employer
+    axios.get("http://localhost:4000/company", {
+      params: { employer: employerId }
+    })
+      .then(function(companyRes) {
+        setCompany(companyRes.data);
+        
+        // Get employee list for new employer
+        return axios.get("http://localhost:4000/directory", {
+          params: { employer: employerId }
+        });
+      })
+      .then(function(directoryRes) {
+        var employeeData;
+        if (directoryRes.data.employees) {
+          employeeData = directoryRes.data.employees;
+        } else {
+          employeeData = directoryRes.data;
+        }
+        setEmployees(employeeData);
+        
+        // Clear selected employees when switching
+        setSelectedEmployee(null);
+        setSelectedPayrollEmployee(null);
+        setSelectedDeductionsEmployee(null);
+        setSelectedDocumentsEmployee(null);
+        setPayStatements([]);
+        setEmployeeDeductions([]);
+        setEmployeeDocuments([]);
+        
+        setLoading(false);
+      })
+      .catch(function(err) {
+        const errorMessage = err.response?.data?.error || "Failed to fetch data for selected employer";
+        setError({
+          message: errorMessage,
+          type: 'fetch_data',
+          canRetry: true
+        });
+        setLoading(false);
+      });
+  }
+
   // Render app
   var isConnected = company || employees.length > 0;
   
   return (
     <div className="app-container">
-      <Header company={company} activeRoute={activeRoute} onRouteChange={handleRouteChange} />
+      <Header 
+        company={company} 
+        activeRoute={activeRoute} 
+        onRouteChange={handleRouteChange}
+      />
 
       <main className="main-content">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="success-container">
+            <div className="success-card">
+              <div className="success-icon">✓</div>
+              <div className="success-content">
+                <p>{successMessage}</p>
+              </div>
+              <button className="dismiss-button" onClick={function() { setSuccessMessage(null); }}>
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="error-container">
@@ -650,7 +793,13 @@ function MainApp() {
             {/* Organization Route - Company Info + Employee Directory + Employee Details */}
             {activeRoute === 'organization' && (
               <>
-        <CompanyInfo company={company} loading={loading} error={error} />
+        <CompanyInfo 
+          company={company} 
+          loading={loading} 
+          error={error}
+          selectedEmployer={selectedEmployer}
+          onEmployerChange={handleEmployerChange}
+        />
         <EmployeeSection 
           employees={employees}
           selectedEmployee={selectedEmployee}
@@ -704,14 +853,6 @@ function MainApp() {
                 employees={employees}
                 newHires={newHires}
                 terminatedEmployees={terminatedEmployees}
-                loading={loading}
-                error={error}
-              />
-            )}
-
-            {/* Sync Route - Enforce Data Sync */}
-            {activeRoute === 'sync' && (
-              <EnforceSync 
                 loading={loading}
                 error={error}
               />

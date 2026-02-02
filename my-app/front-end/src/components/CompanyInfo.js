@@ -1,10 +1,13 @@
 import React from 'react';
+import EmployerSelector from './EmployerSelector';
 
 // Company info display
 function CompanyInfo(props) {
   var company = props.company;
   var loading = props.loading;
   var error = props.error;
+  var selectedEmployer = props.selectedEmployer;
+  var onEmployerChange = props.onEmployerChange;
   
   // Don't show anything if we're loading or there's an error
   if (loading || error) {
@@ -46,10 +49,18 @@ function CompanyInfo(props) {
   return (
     <div id="organization" className="company-info-section">
       <div className="company-header-card">
-        <h2 className="company-header-title">{company.legal_name || company.name || 'Organization Information'}</h2>
-        {company.primary_email && (
-          <div className="company-header-subtitle">{company.primary_email}</div>
-        )}
+        <div className="company-header-main">
+          <div>
+            <h2 className="company-header-title">{company.legal_name || company.name || 'Organization Information'}</h2>
+            {company.primary_email && (
+              <div className="company-header-subtitle">{company.primary_email}</div>
+            )}
+          </div>
+          <EmployerSelector 
+            selectedEmployer={selectedEmployer}
+            onEmployerChange={onEmployerChange}
+          />
+        </div>
       </div>
 
       <div className="company-details-grid">

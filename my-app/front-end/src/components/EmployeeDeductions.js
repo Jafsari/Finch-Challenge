@@ -35,7 +35,9 @@ function EmployeeDeductions(props) {
     return (
       <div className="employee-deductions-container">
         <h3>Deductions for {employeeName}</h3>
-        <p>No deductions found for this employee.</p>
+        <div className="empty-state">
+          <p className="empty-state-message">No deductions found for this employee.</p>
+        </div>
       </div>
     );
   }

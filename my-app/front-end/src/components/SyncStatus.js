@@ -2,7 +2,6 @@ import React from 'react';
 
 function SyncStatus(props) {
   var syncTimes = props.syncTimes || {};
-  var activeRoute = props.activeRoute || 'organization';
 
   function formatSyncTime(timestamp) {
     if (!timestamp) return 'Never';
@@ -27,63 +26,42 @@ function SyncStatus(props) {
     return formatDate(date) + ' ' + formatMilitaryTime(date);
   }
 
-  function getCurrentRouteSyncTime() {
-    switch (activeRoute) {
-      case 'organization':
-        return syncTimes.organization || syncTimes.company || syncTimes.directory;
-      case 'payroll':
-        return syncTimes.payroll || syncTimes.payStatements;
-      case 'deductions':
-        return syncTimes.deductions;
-      case 'documents':
-        return syncTimes.documents;
-      case 'workforce':
-        return syncTimes.workforce || syncTimes.newHires || syncTimes.terminated;
-      case 'eligibility':
-        return syncTimes.eligibility;
-      case 'orgchart':
-        return syncTimes.orgchart;
-      case 'analytics':
-        return syncTimes.analytics;
-      case 'audit':
-        return syncTimes.audit;
-      default:
-        return null;
-    }
+  // Get the most recent sync time from all categories
+  var allSyncTimes = [
+    syncTimes.organization || syncTimes.company || syncTimes.directory,
+    syncTimes.payroll || syncTimes.payStatements,
+    syncTimes.deductions,
+    syncTimes.documents,
+    syncTimes.workforce || syncTimes.newHires || syncTimes.terminated,
+    syncTimes.eligibility,
+    syncTimes.orgchart,
+    syncTimes.analytics,
+    syncTimes.audit
+  ].filter(function(time) { return time !== null && time !== undefined; });
+
+  var latestSyncTime = null;
+  if (allSyncTimes.length > 0) {
+    latestSyncTime = allSyncTimes.reduce(function(latest, current) {
+      return new Date(current) > new Date(latest) ? current : latest;
+    });
   }
 
-  var syncData = [
-    { label: 'Organization', time: syncTimes.organization || syncTimes.company || syncTimes.directory, route: 'organization' },
-    { label: 'Payroll', time: syncTimes.payroll || syncTimes.payStatements, route: 'payroll' },
-    { label: 'Deductions', time: syncTimes.deductions, route: 'deductions' },
-    { label: 'Documents', time: syncTimes.documents, route: 'documents' },
-    { label: 'Workforce', time: syncTimes.workforce || syncTimes.newHires || syncTimes.terminated, route: 'workforce' },
-    { label: 'Eligibility', time: syncTimes.eligibility, route: 'eligibility' },
-    { label: 'Org Chart', time: syncTimes.orgchart, route: 'orgchart' },
-    { label: 'Analytics', time: syncTimes.analytics, route: 'analytics' },
-    { label: 'Audit', time: syncTimes.audit, route: 'audit' }
-  ];
-
-  var currentSyncTime = getCurrentRouteSyncTime();
+  var isSynced = !!latestSyncTime;
 
   return (
     <div className="sync-status-container">
-      <div className="sync-status-header">
-        <h3>Sync Status</h3>
-        <p>Last sync times across all data categories</p>
-      </div>
-      <div className="sync-status-grid">
-        {syncData.map(function(item, index) {
-          var isActive = item.route === activeRoute;
-          var isSynced = !!item.time;
-          return (
-            <div key={index} className={"sync-item" + (isActive ? ' active' : '')}>
-              <div className={isSynced ? 'sync-dot synced' : 'sync-dot never-synced'}></div>
-              <div className="sync-label">{item.label}</div>
-              <div className="sync-value">{formatSyncTime(item.time)}</div>
-            </div>
-          );
-        })}
+      <div className="sync-status-content">
+        <div className="sync-status-indicator">
+          <div className={isSynced ? 'sync-dot synced' : 'sync-dot never-synced'}>
+            {isSynced && <div className="sync-dot-pulse"></div>}
+          </div>
+          <div className="sync-status-info">
+            <span className="sync-status-label">HRIS synced</span>
+            {isSynced && (
+              <span className="sync-status-time">{formatSyncTime(latestSyncTime)}</span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

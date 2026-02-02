@@ -6,7 +6,7 @@ function HowItWorks() {
       <div className="how-it-works-container">
         <div className="section-header">
           <h2>How It Works</h2>
-          <p>Simple steps to get started with Finch Interest</p>
+          <p>Simple steps to get started with Acme Core</p>
         </div>
         <div className="steps-grid">
           <div className="step-card">

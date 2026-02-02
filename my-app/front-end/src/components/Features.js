@@ -5,7 +5,7 @@ function Features() {
     <div className="features-section">
       <div className="features-container">
         <div className="features-header">
-          <h2>Why Choose Finch Interest</h2>
+          <h2>Why Choose Acme Core</h2>
           <p>Everything you need for seamless and secure retirement plan recordkeeping.</p>
         </div>
         <div className="features-grid">

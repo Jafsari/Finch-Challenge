@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import Finch from "@tryfinch/finch-api";
 import axios from "axios";
+import fakeData from "./fakeData.js";
 
 // Load env vars
 dotenv.config();
@@ -119,13 +120,18 @@ app.get("/test", function(req, res) {
 
 // Finch Connect flow
 
-// Create Finch Connect session
+// Create Finch Connect session (for embedded modal flow)
 app.post("/create_link_token", function(req, res) {
-  console.log("[Finch] Creating connect session");
+  console.log("[Finch] Creating connect session for embedded flow");
+  
+  // Set headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   
   finch.connect.sessions.new({
     customer_id: generateRandomCustomerId(),
-    customer_name: "Test",
+    customer_name: "Acme-Corexxyz",
     products: ["company",
       "directory", 
       "individual",
@@ -135,19 +141,21 @@ app.post("/create_link_token", function(req, res) {
       "benefits",
       "documents",],
     "sandbox": "provider",
-    redirect_uri: process.env.REDIRECT_URI,
+    redirect_uri: process.env.REDIRECT_URI, // Still needed for OAuth callback
   })
   .then(function(session) {
     console.log("[Finch] Session created:", session ? session.session_id : "undefined");
+    console.log("[Finch] Session details - ID:", session.session_id, "URL:", session.connect_url);
 
+    // Return session_id for embedded SDK
     res.json({
       session_id: session.session_id,
-      connect_url: session.connect_url,
+      connect_url: session.connect_url, // Keep for backwards compatibility if needed
     });
   })
   .catch(function(err) {
-    console.error("Failed to create session:", err);
-    console.error("Error details:", {
+    console.error("[Finch] Failed to create session:", err);
+    console.error("[Finch] Error details:", {
       status: err.status,
       code: err.error?.code,
       name: err.error?.name,
@@ -161,21 +169,101 @@ app.post("/create_link_token", function(req, res) {
 
 // Handle OAuth callback
 app.get("/finch/callback", function(req, res) {
+  // LOG THE COMPLETE RAW REQUEST FROM FINCH BEFORE ANY PARSING
+  console.log("\n\n");
+  console.log("╔════════════════════════════════════════════════════════════════════════════════╗");
+  console.log("║     COMPLETE RAW REQUEST FROM FINCH → YOUR SERVER (BEFORE PARSING)            ║");
+  console.log("╚════════════════════════════════════════════════════════════════════════════════╝");
+  console.log("\n[Finch] Timestamp:", new Date().toISOString());
+  
+  // Reconstruct the raw HTTP request as it actually appears
+  var rawRequestLine = req.method + " " + req.originalUrl + " HTTP/" + req.httpVersion;
+  var host = req.get('host') || req.headers.host || 'localhost:4000';
+  var rawHeaders = Object.keys(req.headers).map(function(key) {
+    return key + ": " + req.headers[key];
+  }).join("\n");
+  
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] RAW HTTP REQUEST (as it appears in network capture):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log(rawRequestLine);
+  console.log("Host: " + host);
+  console.log(rawHeaders);
+  console.log(""); // Empty line before body (if any)
+  
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] PARSED REQUEST DETAILS (Express parsed):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] Method:", req.method);
+  console.log("[Finch] Original URL (req.originalUrl):", req.originalUrl);
+  console.log("[Finch] URL (req.url):", req.url);
+  console.log("[Finch] Path (req.path):", req.path);
+  console.log("[Finch] Base URL (req.baseUrl):", req.baseUrl);
+  console.log("[Finch] Full URL:", req.protocol + "://" + host + req.originalUrl);
+  console.log("[Finch] HTTP Version:", req.httpVersion);
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] RAW QUERY STRING (exactly as sent by Finch in URL):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  var queryString = req.url.includes('?') ? req.url.split('?')[1] : (req.originalUrl.includes('?') ? req.originalUrl.split('?')[1] : "No query string");
+  console.log(queryString);
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] COMPLETE REQUEST OBJECT (req.query - parsed by Express):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log(req.query);
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] ALL REQUEST HEADERS (from Finch - original format):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log(req.headers);
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] REQUEST IP & CONNECTION INFO:");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] IP:", req.ip || req.connection.remoteAddress);
+  console.log("[Finch] Remote Address:", req.connection.remoteAddress);
+  console.log("[Finch] Remote Port:", req.connection.remotePort);
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] REQUEST BODY (if any - original format):");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log(req.body || "No body (GET request)");
+  console.log("\n[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] COMPLETE RAW REQUEST SUMMARY:");
+  console.log("[Finch] ──────────────────────────────────────────────────────────────────────");
+  console.log("[Finch] This is what Finch sent to your server:");
+  console.log("[Finch]   URL:", req.originalUrl);
+  console.log("[Finch]   Method:", req.method);
+  console.log("[Finch]   Query String:", queryString);
+  console.log("[Finch]   Parsed Query Params:", Object.keys(req.query).length, "parameters");
+  
+  // NOW extract the code and error AFTER logging the raw request
   var code = req.query.code;
   var error = req.query.error;
   
-  // Log the incoming request details
-  console.log("[Finch] Callback URL:", req.url);
-  console.log("[Finch] Callback method:", req.method);
-  console.log("[Finch] Callback query params:", req.query);
-  console.log("[Finch] Authorization code:", code);
+  // Prominently log the authorization code
+  console.log("\n");
+  console.log("╔════════════════════════════════════════════════════════════════╗");
+  console.log("║              AUTHORIZATION CODE RECEIVED                       ║");
+  console.log("╚════════════════════════════════════════════════════════════════╝");
+  console.log("[Finch] Code:", code);
+  console.log("[Finch] Code length:", code ? code.length : 0);
+  console.log("[Finch] Code type:", typeof code);
+  console.log("\n");
+  
   console.log("[Finch] Error (if any):", error);
+  console.log("[Finch] Error (raw):", JSON.stringify(error));
   
   if (error || !code) {
+    console.error("\n");
+    console.error("╔════════════════════════════════════════════════════════════════╗");
+    console.error("║                    CALLBACK ERROR DETECTED                     ║");
+    console.error("╚════════════════════════════════════════════════════════════════╝");
+    console.error("[Finch] ❌ Callback failed - missing code or error present");
+    console.error("[Finch] Error value:", error);
+    console.error("[Finch] Code value:", code);
+    console.error("[Finch] Sending 400 response: 'Connection failed.'");
+    console.error("\n");
     return res.status(400).send("Connection failed.");
   }
 
-  console.log("[Finch] Exchanging code for access token");
+  console.log("[Finch] ✅ Authorization code validated, proceeding to exchange for access token");
 
   // Exchange code for token using JSON payload (Finch docs approach)
   var jsonPayload = {
@@ -185,7 +273,23 @@ app.get("/finch/callback", function(req, res) {
     redirect_uri: process.env.REDIRECT_URI || ""
   };
 
-  console.log("[Finch] JSON payload:", jsonPayload);
+  console.log("\n[Finch] ════════════════════════════════════════");
+  console.log("[Finch] EXCHANGING CODE FOR ACCESS TOKEN");
+  console.log("[Finch] ════════════════════════════════════════");
+  console.log("[Finch] Request URL: https://api.tryfinch.com/auth/token");
+  console.log("[Finch] Request Method: POST");
+  console.log("[Finch] Request Headers:", {
+    "Content-Type": "application/json",
+    "Finch-API-Version": "2020-09-17"
+  });
+  console.log("[Finch] Request Payload:", {
+    client_id: jsonPayload.client_id,
+    client_secret: "***REDACTED***",
+    code: code,
+    redirect_uri: jsonPayload.redirect_uri
+  });
+  console.log("[Finch] ════════════════════════════════════════\n");
+  
   axios.post(
     "https://api.tryfinch.com/auth/token",
     jsonPayload,
@@ -199,15 +303,48 @@ app.get("/finch/callback", function(req, res) {
   )
   .then(function(tokenResp) {
     var accessToken = tokenResp.data ? tokenResp.data.access_token : null;
+    var tokenType = tokenResp.data ? tokenResp.data.token_type : null;
+    var expiresIn = tokenResp.data ? tokenResp.data.expires_in : null;
+    var scope = tokenResp.data ? tokenResp.data.scope : null;
+    
+    console.log("\n[Finch] ════════════════════════════════════════");
+    console.log("[Finch] TOKEN EXCHANGE RESPONSE");
+    console.log("[Finch] ════════════════════════════════════════");
+    console.log("[Finch] Response Status:", tokenResp.status, tokenResp.statusText);
+    console.log("[Finch] Response Headers (original format):");
+    console.log(tokenResp.headers);
+    console.log("[Finch] Full Response Data (original format):");
+    console.log(tokenResp.data);
+    console.log("\n[Finch] ACCESS TOKEN DETAILS:");
+    console.log("[Finch] Token Type:", tokenType);
+    console.log("[Finch] Expires In:", expiresIn, "seconds");
+    console.log("[Finch] Scope:", scope);
+    console.log("[Finch] Access Token (full):", accessToken);
+    console.log("[Finch] Access Token (preview):", accessToken ? (accessToken.slice(0, 20) + "..." + accessToken.slice(-20)) : "null");
+    console.log("[Finch] Access Token length:", accessToken ? accessToken.length : 0);
+    console.log("[Finch] ════════════════════════════════════════\n");
+    
     if (!accessToken) {
+      console.error("[Finch] ❌ No access token in response");
       return res.status(500).send("Failed to obtain access token.");
     }
 
     // Store token
     currentAccessToken = accessToken;
-    console.log("[Finch] Access token obtained: " + accessToken.slice(0,4) + "..." + accessToken.slice(-4));
+    console.log("[Finch] ✅ Access token stored successfully");
+    console.log("[Finch] Token stored in memory (currentAccessToken)");
 
-    // Return success page
+    // Log what we're sending back to the browser
+    console.log("\n");
+    console.log("╔════════════════════════════════════════════════════════════════╗");
+    console.log("║              SENDING RESPONSE TO BROWSER                       ║");
+    console.log("╚════════════════════════════════════════════════════════════════╝");
+    console.log("[Finch] Response Status: 200 OK");
+    console.log("[Finch] Response Type: HTML page with postMessage script");
+    console.log("[Finch] Response will trigger: window.opener.postMessage({ type: 'finch:connected' }, '*')");
+    console.log("\n");
+
+    // Return success page (for redirect flow)
     res.send(
       "<!DOCTYPE html>" +
       "<html>" +
@@ -224,8 +361,91 @@ app.get("/finch/callback", function(req, res) {
     );
   })
   .catch(function(err) {
-    console.error("Callback error:", err);
+    console.error("\n");
+    console.error("╔════════════════════════════════════════════════════════════════╗");
+    console.error("║                 TOKEN EXCHANGE ERROR                            ║");
+    console.error("╚════════════════════════════════════════════════════════════════╝");
+    console.error("[Finch] Error Message:", err.message);
+    console.error("[Finch] Error Code:", err.code);
+    if (err.response) {
+      console.error("[Finch] Response Status:", err.response.status);
+      console.error("[Finch] Response Status Text:", err.response.statusText);
+      console.error("[Finch] Response Headers (original format):");
+      console.error(err.response.headers);
+      console.error("[Finch] Response Data (original format):");
+      console.error(err.response.data);
+    }
+    if (err.request) {
+      console.error("[Finch] Request made but no response received");
+      console.error("[Finch] Request:", err.request);
+    }
+    console.error("[Finch] Full Error Object (original format):");
+    console.error(err);
+    console.error("\n[Finch] Sending 500 response: 'Connection failed.'");
+    console.error("\n");
     res.status(500).send("Connection failed.");
+  });
+});
+
+// Exchange authorization code for access token (for embedded flow)
+app.post("/finch/exchange-code", function(req, res) {
+  console.log("[Finch] Exchanging authorization code for embedded flow");
+  
+  var code = req.body.code;
+  if (!code) {
+    return res.status(400).json({ error: "Authorization code is required" });
+  }
+
+  // Set headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  // Exchange code for token
+  var jsonPayload = {
+    client_id: process.env.FINCH_CLIENT_ID,
+    client_secret: process.env.FINCH_CLIENT_SECRET,
+    code: code,
+    redirect_uri: process.env.REDIRECT_URI || ""
+  };
+
+  console.log("[Finch] Exchanging code for access token...");
+  
+  axios.post(
+    "https://api.tryfinch.com/auth/token",
+    jsonPayload,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Finch-API-Version": "2020-09-17",
+      },
+      timeout: 15000,
+    }
+  )
+  .then(function(tokenResp) {
+    var accessToken = tokenResp.data ? tokenResp.data.access_token : null;
+    
+    if (!accessToken) {
+      console.error("[Finch] No access token in response");
+      return res.status(500).json({ error: "Failed to obtain access token" });
+    }
+
+    // Store token
+    currentAccessToken = accessToken;
+    console.log("[Finch] ✅ Access token stored successfully for embedded flow");
+
+    res.json({ 
+      success: true,
+      message: "Successfully connected to Finch"
+    });
+  })
+  .catch(function(err) {
+    console.error("[Finch] Token exchange error:", err);
+    var errorMessage = "Failed to exchange authorization code";
+    if (err.response && err.response.data) {
+      errorMessage = err.response.data.error || errorMessage;
+    }
+    res.status(500).json({ error: errorMessage });
   });
 });
 
@@ -238,7 +458,17 @@ app.get("/company", function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching company info");
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching company info for employer:", employer);
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].company) {
+    console.log("[Finch] Returning cached company data for:", employer);
+    return res.json(fakeData[employer].company);
+  }
+
+  console.log("[Finch] Fetching company info from API");
   
   var authed = createAuthenticatedClient(token);
   authed.hris.company.retrieve()
@@ -270,7 +500,26 @@ app.get("/directory", function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching employee directory");
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching employee directory for employer:", employer);
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].employees) {
+    console.log("[Finch] Returning cached employee directory for:", employer);
+    // Normalize employee data to match API format (convert department object to string)
+    var normalizedEmployees = fakeData[employer].employees.map(function(emp) {
+      var normalized = { ...emp };
+      // Convert department object to string if it's an object
+      if (normalized.department && typeof normalized.department === 'object') {
+        normalized.department = normalized.department.name || 'N/A';
+      }
+      return normalized;
+    });
+    return res.json({ employees: normalizedEmployees });
+  }
+
+  console.log("[Finch] Fetching employee directory from API");
   
   var authed = createAuthenticatedClient(token);
   authed.hris.directory.list()
@@ -309,7 +558,84 @@ app.get("/employee/:id", async function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching employee details for ID: " + id);
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching employee details for ID: " + id + ", employer: " + employer);
+
+  // Helper function to format location
+  function formatLocation(location) {
+    if (!location) return "";
+    var parts = [];
+    if (location.line1) parts.push(location.line1);
+    if (location.line2) parts.push(location.line2);
+    var cityState = [];
+    if (location.city) cityState.push(location.city);
+    if (location.state) cityState.push(location.state);
+    if (location.postal_code) cityState.push(location.postal_code);
+    if (cityState.length > 0) parts.push(cityState.join(", "));
+    if (location.country) parts.push(location.country);
+    return parts.join(", ") || "";
+  }
+
+  // Helper function to format income
+  function formatIncome(income) {
+    if (!income || !income.amount) return "";
+    var formattedAmount = income.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    var unit = income.unit || "";
+    var currency = income.currency || "";
+    var parts = [];
+    if (formattedAmount) parts.push(formattedAmount);
+    if (currency) parts.push(currency);
+    if (unit) parts.push("(" + unit + ")");
+    return parts.join(" ") || "";
+  }
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].employeeDetails && fakeData[employer].employeeDetails[id]) {
+    console.log("[Finch] Returning cached employee details for:", id, "employer:", employer);
+    var employeeData = fakeData[employer].employeeDetails[id];
+    // Format the data to match the expected structure
+    var employment = employeeData.employment;
+    
+    // Normalize department - convert object to string if needed
+    var departmentValue = employment.department;
+    if (departmentValue && typeof departmentValue === 'object') {
+      departmentValue = departmentValue.name || 'N/A';
+    }
+    
+    return res.json({
+      individual: employeeData.individual,
+      employment: {
+        id: employment.id,
+        first_name: employment.first_name,
+        last_name: employment.last_name,
+        middle_name: employment.middle_name,
+        job_title: employment.title,
+        department: departmentValue,
+        employment_type: employment.employment_type,
+        employment_status: employment.employment_status,
+        manager_id: employment.manager ? employment.manager.id : "",
+        start_date: employment.start_date,
+        end_date: employment.end_date || null,
+        is_active: employment.is_active,
+        location: formatLocation(employment.location),
+        location_line1: employment.location.line1 || "",
+        location_line2: employment.location.line2 || "",
+        location_city: employment.location.city || "",
+        location_state: employment.location.state || "",
+        location_postal_code: employment.location.postal_code || "",
+        location_country: employment.location.country || "",
+        income: formatIncome(employment.income),
+        income_unit: employment.income.unit || "",
+        income_amount: employment.income.amount || null,
+        income_currency: employment.income.currency || "",
+        income_effective_date: "",
+        income_history: []
+      }
+    });
+  }
+
+  console.log("[Finch] Fetching employee details from API");
   
   try {
     // Make parallel API calls
@@ -353,8 +679,8 @@ app.get("/employee/:id", async function(req, res) {
       return record?.email || "";
     };
 
-    // Helper function to format location
-    const formatLocation = (location) => {
+    // Helper function to format location (for API responses)
+    const formatLocationAPI = (location) => {
       if (!location) return "";
       var parts = [];
       if (location.line1) parts.push(location.line1);
@@ -368,8 +694,8 @@ app.get("/employee/:id", async function(req, res) {
       return parts.join(", ") || "";
     };
 
-    // Helper function to format income
-    const formatIncome = (income) => {
+    // Helper function to format income (for API responses)
+    const formatIncomeAPI = (income) => {
       if (!income || !income.amount) return "";
       var formattedAmount = income.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
       var unit = income.unit || "";
@@ -422,7 +748,7 @@ app.get("/employee/:id", async function(req, res) {
         class_code: employment.class_code || null,
         
         // Location
-        location: formatLocation(employment.location),
+        location: formatLocationAPI(employment.location),
         location_line1: employment.location?.line1 || "",
         location_line2: employment.location?.line2 || "",
         location_city: employment.location?.city || "",
@@ -431,7 +757,7 @@ app.get("/employee/:id", async function(req, res) {
         location_country: employment.location?.country || "",
         
         // Income
-        income: formatIncome(employment.income),
+        income: formatIncomeAPI(employment.income),
         income_unit: employment.income?.unit || "",
         income_amount: employment.income?.amount || null,
         income_currency: employment.income?.currency || "",
@@ -520,7 +846,39 @@ app.get("/employee/:id/pay-statements", async function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching pay statements for employee:", id);
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching pay statements for employee:", id, "employer:", employer);
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].payStatements && fakeData[employer].payStatements[id]) {
+    console.log("[Finch] Returning cached pay statements for:", id, "employer:", employer);
+    var statements = fakeData[employer].payStatements[id];
+    // Format statements to match expected structure
+    var formattedStatements = statements.map(function(stmt) {
+      return {
+        type: stmt.type,
+        payment_method: stmt.payment_method,
+        total_hours: stmt.total_hours,
+        gross_pay: stmt.gross_pay.amount,
+        gross_pay_amount: stmt.gross_pay.amount,
+        gross_pay_currency: stmt.gross_pay.currency,
+        net_pay: stmt.net_pay.amount,
+        net_pay_amount: stmt.net_pay.amount,
+        net_pay_currency: stmt.net_pay.currency,
+        earnings: stmt.earnings,
+        deductions: stmt.deductions,
+        pay_date: stmt.pay_date,
+        start_date: stmt.start_date,
+        end_date: stmt.end_date,
+        individual_id: id,
+        currency: stmt.gross_pay.currency || 'USD'
+      };
+    });
+    return res.json({ responses: formattedStatements.map(function(s) { return { code: 200, body: s }; }) });
+  }
+
+  console.log("[Finch] Fetching pay statements from API");
 
   try {
     // First get employment data to find start_date
@@ -682,7 +1040,17 @@ app.get("/employee/:id/deductions", async function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching deductions for employee:", id);
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching deductions for employee:", id, "employer:", employer);
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].deductions && fakeData[employer].deductions[id]) {
+    console.log("[Finch] Returning cached deductions for:", id, "employer:", employer);
+    return res.json(fakeData[employer].deductions[id]);
+  }
+
+  console.log("[Finch] Fetching deductions from API");
 
   try {
     // Step 1: Get employment data for eligibility checking (90 day rule)
