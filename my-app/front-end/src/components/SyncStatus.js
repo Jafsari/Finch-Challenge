@@ -2,6 +2,7 @@ import React from 'react';
 
 function SyncStatus(props) {
   var syncTimes = props.syncTimes || {};
+  var onEnforceSync = props.onEnforceSync;
 
   function formatSyncTime(timestamp) {
     if (!timestamp) return 'Never';
@@ -48,6 +49,12 @@ function SyncStatus(props) {
 
   var isSynced = !!latestSyncTime;
 
+  function handleEnforceSync() {
+    if (onEnforceSync) {
+      onEnforceSync();
+    }
+  }
+
   return (
     <div className="sync-status-container">
       <div className="sync-status-content">
@@ -61,6 +68,15 @@ function SyncStatus(props) {
               <span className="sync-status-time">{formatSyncTime(latestSyncTime)}</span>
             )}
           </div>
+        </div>
+        <div className="sync-status-actions">
+          <button 
+            className="enforce-sync-button"
+            onClick={handleEnforceSync}
+            type="button"
+          >
+            Enforce Sync
+          </button>
         </div>
       </div>
     </div>

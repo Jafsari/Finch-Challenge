@@ -3,7 +3,14 @@ import cors from "cors";
 import dotenv from "dotenv";
 import Finch from "@tryfinch/finch-api";
 import axios from "axios";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import fakeData from "./fakeData.js";
+
+// Get directory path for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load env vars
 dotenv.config();
@@ -34,6 +41,50 @@ function generateRandomCustomerId() {
   const timestamp = Date.now().toString();
   const randomSuffix = Math.random().toString(36).substring(2, 15);
   return prefix + timestamp + "_" + randomSuffix;
+}
+
+// Save captured data to fakeData.js file
+function saveCapturedData(employer, dataType, data) {
+  if (employer !== 'justin-test') {
+    return; // Only save data for justin-test
+  }
+
+  try {
+    // Initialize justin-test object if it doesn't exist
+    if (!fakeData['justin-test']) {
+      fakeData['justin-test'] = {};
+    }
+    
+    // Update in-memory cache
+    fakeData['justin-test'][dataType] = data;
+    
+    var fakeDataPath = path.join(__dirname, 'fakeData.js');
+    
+    // Convert entire fakeData object to JSON string with proper indentation
+    var jsonString = JSON.stringify(fakeData, null, 2);
+    
+    // Convert JSON format to JavaScript object format
+    // Only replace object keys (lines that start with "key":), not string values
+    var lines = jsonString.split('\n');
+    var jsLines = lines.map(function(line) {
+      // Match lines with object keys like:  "key": value
+      // Replace "key": with 'key': but preserve the rest
+      return line.replace(/^(\s+)"([^"]+)":(\s*)/, "$1'$2':$3");
+    });
+    var jsContent = jsLines.join('\n');
+    
+    // Build the file content
+    var fileContent = "// Fake data for demo - different data for each employer\n";
+    fileContent += "// Note: 'justin-test' is populated automatically from API responses\n\n";
+    fileContent += "var fakeData = " + jsContent + ";\n\n";
+    fileContent += "export default fakeData;\n";
+    
+    fs.writeFileSync(fakeDataPath, fileContent, 'utf8');
+    console.log("[Capture] Saved " + dataType + " data for " + employer + " to file");
+  } catch (err) {
+    console.error("[Capture] Error saving data:", err);
+    console.error("[Capture] Error details:", err.message);
+  }
 }
 
 // Get token from header or stored token
@@ -485,6 +536,11 @@ app.get("/company", function(req, res) {
       
       console.log("[Finch] Full company data:", JSON.stringify(company, null, 2));
       
+      // Capture and save data for justin-test
+      if (employer === 'justin-test' && company) {
+        saveCapturedData(employer, 'company', company);
+      }
+      
       // Return the full company object so all fields are available
       res.json(company || {});
     })
@@ -540,6 +596,11 @@ app.get("/directory", function(req, res) {
         employees = directory.employees;
       } else if (Array.isArray(directory)) {
         employees = directory;
+      }
+      
+      // Capture and save data for justin-test
+      if (employer === 'justin-test' && employees.length > 0) {
+        saveCapturedData(employer, 'employees', employees);
       }
       
       res.json({ employees: employees });
@@ -770,6 +831,41 @@ app.get("/employee/:id", async function(req, res) {
         work_id: employment.work_id || null
       }
     });
+    
+    // Capture and save employee details for justin-test
+    if (employer === 'justin-test') {
+      // Initialize justin-test object if it doesn't exist
+      if (!fakeData['justin-test']) {
+        fakeData['justin-test'] = {};
+      }
+      if (!fakeData['justin-test'].employeeDetails) {
+        fakeData['justin-test'].employeeDetails = {};
+      }
+      fakeData['justin-test'].employeeDetails[id] = {
+        individual: {
+          first_name: individual.first_name || "",
+          last_name: individual.last_name || "",
+          email: getEmail(individual)
+        },
+        employment: {
+          id: employment.id || "",
+          first_name: employment.first_name || "",
+          last_name: employment.last_name || "",
+          middle_name: employment.middle_name || "",
+          title: employment.title || "",
+          department: employment.department,
+          employment_type: formatEmploymentType(employment.employment),
+          employment_status: employment.employment_status || "",
+          manager: employment.manager ? { id: employment.manager.id } : null,
+          start_date: employment.start_date || "",
+          end_date: employment.end_date || null,
+          is_active: employment.is_active || false,
+          location: employment.location || {},
+          income: employment.income || {}
+        }
+      };
+      saveCapturedData(employer, 'employeeDetails', fakeData['justin-test'].employeeDetails);
+    }
 
   } catch (err) {
     handleApiError(err, res, "employee/" + id);
@@ -853,28 +949,145 @@ app.get("/employee/:id/pay-statements", async function(req, res) {
   // Return fake data if available
   if (fakeData[employer] && fakeData[employer].payStatements && fakeData[employer].payStatements[id]) {
     console.log("[Finch] Returning cached pay statements for:", id, "employer:", employer);
-    var statements = fakeData[employer].payStatements[id];
+    var rawStatements = fakeData[employer].payStatements[id];
+    
+    // Log the raw cached data structure for debugging
+    console.log("[Finch] Raw cached statements structure:", JSON.stringify(rawStatements, null, 2));
+    
+    // Extract statements from the cached structure
+    // The structure can be:
+    // 1. Direct array of statements: [{gross_pay: {...}, ...}, ...]
+    // 2. Array with nested pay_statements: [{paging: {...}, pay_statements: [{...}, ...]}, ...]
+    var statements = [];
+    if (Array.isArray(rawStatements)) {
+      rawStatements.forEach(function(item) {
+        if (item && typeof item === 'object') {
+          // Check if it has nested pay_statements array
+          if (item.pay_statements && Array.isArray(item.pay_statements)) {
+            statements = statements.concat(item.pay_statements);
+          } else if (item.gross_pay || item.net_pay || item.type) {
+            // It's a direct statement object
+            statements.push(item);
+          }
+        }
+      });
+    } else if (rawStatements && typeof rawStatements === 'object') {
+      // Single object - check for nested structure
+      if (rawStatements.pay_statements && Array.isArray(rawStatements.pay_statements)) {
+        statements = rawStatements.pay_statements;
+      } else {
+        statements = [rawStatements];
+      }
+    }
+    
+    // Filter out null/undefined entries
+    statements = statements.filter(function(s) { return s !== null && s !== undefined; });
+    
+    console.log("[Finch] Extracted statements count:", statements.length);
+    
     // Format statements to match expected structure
     var formattedStatements = statements.map(function(stmt) {
-      return {
-        type: stmt.type,
-        payment_method: stmt.payment_method,
-        total_hours: stmt.total_hours,
-        gross_pay: stmt.gross_pay.amount,
-        gross_pay_amount: stmt.gross_pay.amount,
-        gross_pay_currency: stmt.gross_pay.currency,
-        net_pay: stmt.net_pay.amount,
-        net_pay_amount: stmt.net_pay.amount,
-        net_pay_currency: stmt.net_pay.currency,
-        earnings: stmt.earnings,
-        deductions: stmt.deductions,
-        pay_date: stmt.pay_date,
-        start_date: stmt.start_date,
-        end_date: stmt.end_date,
+      // Ensure stmt is an object
+      if (!stmt || typeof stmt !== 'object') {
+        console.warn("[Finch] Invalid statement object:", stmt);
+        return null;
+      }
+      
+      // Log the statement structure for debugging
+      console.log("[Finch] Processing statement:", JSON.stringify(stmt, null, 2));
+      
+      // Handle gross_pay - can be object {amount, currency} or number
+      var grossPayAmount = null;
+      var grossPayCurrency = 'USD';
+      if (stmt.gross_pay !== null && stmt.gross_pay !== undefined) {
+        if (typeof stmt.gross_pay === 'object' && stmt.gross_pay !== null && stmt.gross_pay.amount !== undefined) {
+          grossPayAmount = stmt.gross_pay.amount;
+          grossPayCurrency = stmt.gross_pay.currency || 'USD';
+        } else if (typeof stmt.gross_pay === 'number') {
+          grossPayAmount = stmt.gross_pay;
+        }
+      } else if (stmt.gross !== null && stmt.gross !== undefined) {
+        // Also check for 'gross' field (alternative naming)
+        if (typeof stmt.gross === 'object' && stmt.gross !== null && stmt.gross.amount !== undefined) {
+          grossPayAmount = stmt.gross.amount;
+          grossPayCurrency = stmt.gross.currency || 'USD';
+        } else if (typeof stmt.gross === 'number') {
+          grossPayAmount = stmt.gross;
+        }
+      }
+      
+      // Handle net_pay - can be object {amount, currency} or number
+      var netPayAmount = null;
+      var netPayCurrency = 'USD';
+      if (stmt.net_pay !== null && stmt.net_pay !== undefined) {
+        if (typeof stmt.net_pay === 'object' && stmt.net_pay !== null && stmt.net_pay.amount !== undefined) {
+          netPayAmount = stmt.net_pay.amount;
+          netPayCurrency = stmt.net_pay.currency || 'USD';
+        } else if (typeof stmt.net_pay === 'number') {
+          netPayAmount = stmt.net_pay;
+        }
+      } else if (stmt.net !== null && stmt.net !== undefined) {
+        // Also check for 'net' field (alternative naming)
+        if (typeof stmt.net === 'object' && stmt.net !== null && stmt.net.amount !== undefined) {
+          netPayAmount = stmt.net.amount;
+          netPayCurrency = stmt.net.currency || 'USD';
+        } else if (typeof stmt.net === 'number') {
+          netPayAmount = stmt.net;
+        }
+      }
+      
+      console.log("[Finch] Extracted amounts - gross:", grossPayAmount, "net:", netPayAmount);
+      
+      // Preserve all fields from the original statement, especially earnings, taxes, and employee_deductions
+      var formattedStatement = {
+        type: stmt.type || 'regular_payroll',
+        payment_method: stmt.payment_method || 'direct_deposit',
+        total_hours: stmt.total_hours || null,
+        gross_pay: grossPayAmount,
+        gross_pay_amount: grossPayAmount,
+        gross_pay_currency: grossPayCurrency,
+        net_pay: netPayAmount,
+        net_pay_amount: netPayAmount,
+        net_pay_currency: netPayCurrency,
+        pay_date: stmt.pay_date || null,
+        start_date: stmt.start_date || null,
+        end_date: stmt.end_date || null,
         individual_id: id,
-        currency: stmt.gross_pay.currency || 'USD'
+        currency: grossPayCurrency
       };
-    });
+      
+      // Preserve earnings array if it exists
+      if (stmt.earnings && Array.isArray(stmt.earnings)) {
+        formattedStatement.earnings = stmt.earnings;
+      } else {
+        formattedStatement.earnings = [];
+      }
+      
+      // Preserve taxes array if it exists (frontend expects this)
+      if (stmt.taxes && Array.isArray(stmt.taxes)) {
+        formattedStatement.taxes = stmt.taxes;
+      } else {
+        formattedStatement.taxes = [];
+      }
+      
+      // Preserve employee_deductions array if it exists (frontend expects this, not 'deductions')
+      if (stmt.employee_deductions && Array.isArray(stmt.employee_deductions)) {
+        formattedStatement.employee_deductions = stmt.employee_deductions;
+      } else if (stmt.deductions && Array.isArray(stmt.deductions)) {
+        // Fallback to 'deductions' if 'employee_deductions' doesn't exist
+        formattedStatement.employee_deductions = stmt.deductions;
+      } else {
+        formattedStatement.employee_deductions = [];
+      }
+      
+      // Also include deductions for backwards compatibility
+      formattedStatement.deductions = formattedStatement.employee_deductions;
+      
+      return formattedStatement;
+    }).filter(function(s) { return s !== null; }); // Remove any null entries from invalid statements
+    
+    console.log("[Finch] Formatted statements:", JSON.stringify(formattedStatements, null, 2));
+    
     return res.json({ responses: formattedStatements.map(function(s) { return { code: 200, body: s }; }) });
   }
 
@@ -1020,6 +1233,32 @@ app.get("/employee/:id/pay-statements", async function(req, res) {
       console.error("[Finch]   Payment IDs:", paymentIds);
       console.error("[Finch] =================================================");
       return res.status(payStatementResp.status || 400).json(payStatementData);
+    }
+
+    // Capture and save pay statements for justin-test
+    if (employer === 'justin-test' && payStatementData) {
+      // Initialize justin-test object if it doesn't exist
+      if (!fakeData['justin-test']) {
+        fakeData['justin-test'] = {};
+      }
+      
+      // Extract statements from response structure
+      var statements = [];
+      if (payStatementData.responses && Array.isArray(payStatementData.responses)) {
+        statements = payStatementData.responses.map(function(r) {
+          return r.body || r;
+        }).filter(function(s) { return s !== null && s !== undefined; });
+      } else if (Array.isArray(payStatementData)) {
+        statements = payStatementData;
+      }
+      
+      if (statements.length > 0) {
+        if (!fakeData['justin-test'].payStatements) {
+          fakeData['justin-test'].payStatements = {};
+        }
+        fakeData['justin-test'].payStatements[id] = statements;
+        saveCapturedData(employer, 'payStatements', fakeData['justin-test'].payStatements);
+      }
     }
 
     // Return the pay statement data
@@ -1216,8 +1455,8 @@ app.get("/employee/:id/deductions", async function(req, res) {
       retirement401kEnrolled = !!retirement401kDeduction;
     }
 
-    // Return the deductions data with eligibility and 401k info
-    res.json({
+    // Prepare deductions response
+    var deductionsResponse = {
       individual_id: id,
       deductions: individualDeductions,
       eligibility: {
@@ -1233,7 +1472,23 @@ app.get("/employee/:id/deductions", async function(req, res) {
         benefit_id: retirement401kBenefit ? (retirement401kBenefit.benefit_id || retirement401kBenefit.id) : null,
         benefit_type: retirement401kBenefit ? (retirement401kBenefit.type || retirement401kBenefit.benefit_type) : null
       }
-    });
+    };
+    
+    // Capture and save deductions for justin-test
+    if (employer === 'justin-test') {
+      // Initialize justin-test object if it doesn't exist
+      if (!fakeData['justin-test']) {
+        fakeData['justin-test'] = {};
+      }
+      if (!fakeData['justin-test'].deductions) {
+        fakeData['justin-test'].deductions = {};
+      }
+      fakeData['justin-test'].deductions[id] = deductionsResponse;
+      saveCapturedData(employer, 'deductions', fakeData['justin-test'].deductions);
+    }
+    
+    // Return the deductions data with eligibility and 401k info
+    res.json(deductionsResponse);
 
   } catch (err) {
     console.error("[Finch] Deductions error:", err);
@@ -1250,7 +1505,31 @@ app.get("/employee/:id/documents", async function(req, res) {
     return res.status(401).json({ error: "No access token available" });
   }
 
-  console.log("[Finch] Fetching documents for employee:", id);
+  // Check for employer parameter
+  var employer = req.query.employer || req.headers['x-employer'] || 'justin-test';
+  console.log("[Finch] Fetching documents for employee:", id, "employer:", employer);
+  console.log("[Finch] Checking fake data - employer exists:", !!fakeData[employer]);
+  if (fakeData[employer]) {
+    console.log("[Finch] Fake data has documents key:", !!fakeData[employer].documents);
+    if (fakeData[employer].documents) {
+      console.log("[Finch] Available employee IDs in documents:", Object.keys(fakeData[employer].documents));
+      console.log("[Finch] Requested employee ID exists:", !!fakeData[employer].documents[id]);
+    }
+  }
+
+  // Return fake data if available
+  if (fakeData[employer] && fakeData[employer].documents && fakeData[employer].documents[id]) {
+    console.log("[Finch] Returning cached documents for:", id, "employer:", employer);
+    var documents = fakeData[employer].documents[id];
+    console.log("[Finch] Number of documents to return:", documents.length);
+    console.log("[Finch] Document types:", documents.map(function(d) { return d.type; }));
+    return res.json({
+      individual_id: id,
+      documents: documents
+    });
+  }
+
+  console.log("[Finch] No fake data found, fetching documents from API");
 
   try {
     // Step 1: List documents for this individual

@@ -50,16 +50,18 @@ function CompanyInfo(props) {
     <div id="organization" className="company-info-section">
       <div className="company-header-card">
         <div className="company-header-main">
-          <div>
+          <div className="company-header-content">
             <h2 className="company-header-title">{company.legal_name || company.name || 'Organization Information'}</h2>
             {company.primary_email && (
               <div className="company-header-subtitle">{company.primary_email}</div>
             )}
           </div>
-          <EmployerSelector 
-            selectedEmployer={selectedEmployer}
-            onEmployerChange={onEmployerChange}
-          />
+          <div className="company-header-actions">
+            <EmployerSelector 
+              selectedEmployer={selectedEmployer}
+              onEmployerChange={onEmployerChange}
+            />
+          </div>
         </div>
       </div>
 

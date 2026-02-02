@@ -577,6 +577,9 @@ function MainApp() {
             documents = res.data;
           }
           
+          console.log("[App] Received documents:", documents.length);
+          console.log("[App] Document types:", documents.map(function(d) { return d.type; }));
+          
           // Filter documents to ensure they match the employee ID
           documents = documents.filter(function(doc) {
             if (doc.data && doc.data.individual_id) {
@@ -584,6 +587,9 @@ function MainApp() {
             }
             return true;
           });
+          
+          console.log("[App] After filtering:", documents.length);
+          console.log("[App] Filtered document types:", documents.map(function(d) { return d.type; }));
           
           setEmployeeDocuments(documents);
           // Sync times are set once at login and never change
@@ -612,6 +618,38 @@ function MainApp() {
   // Clear error function
   function clearError() {
     setError(null);
+  }
+
+  // Handle enforce sync
+  function handleEnforceSync() {
+    // Update all sync times to current time
+    var now = new Date();
+    var nowISO = now.toISOString();
+    
+    setSyncTimes({
+      organization: nowISO,
+      company: nowISO,
+      directory: nowISO,
+      payroll: nowISO,
+      payStatements: nowISO,
+      deductions: nowISO,
+      documents: nowISO,
+      workforce: nowISO,
+      newHires: nowISO,
+      terminated: nowISO,
+      eligibility: nowISO,
+      orgchart: nowISO,
+      analytics: nowISO,
+      audit: nowISO
+    });
+    
+    // Show success message
+    setSuccessMessage('HRIS data synced successfully!');
+    
+    // Clear success message after 3 seconds
+    setTimeout(function() {
+      setSuccessMessage(null);
+    }, 3000);
   }
 
   // Handle route change
@@ -733,12 +771,22 @@ function MainApp() {
         {successMessage && (
           <div className="success-container">
             <div className="success-card">
-              <div className="success-icon">✓</div>
+              <div className="success-icon">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
               <div className="success-content">
                 <p>{successMessage}</p>
               </div>
-              <button className="dismiss-button" onClick={function() { setSuccessMessage(null); }}>
-                ×
+              <button 
+                className="dismiss-button" 
+                onClick={function() { setSuccessMessage(null); }}
+                aria-label="Dismiss notification"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
             </div>
           </div>
@@ -788,7 +836,11 @@ function MainApp() {
         {isConnected && !loading && (
           <div className="connected-content">
             {/* Sync Status Chart - Show on all tabs */}
-            <SyncStatus syncTimes={syncTimes} activeRoute={activeRoute} />
+            <SyncStatus 
+              syncTimes={syncTimes} 
+              activeRoute={activeRoute}
+              onEnforceSync={handleEnforceSync}
+            />
 
             {/* Organization Route - Company Info + Employee Directory + Employee Details */}
             {activeRoute === 'organization' && (
