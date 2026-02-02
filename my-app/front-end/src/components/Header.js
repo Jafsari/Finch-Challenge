@@ -69,13 +69,6 @@ function Header(props) {
             Documents
           </a>
           <a 
-            href="#whatschanged"
-            className={activeRoute === 'whatschanged' ? 'active' : ''}
-            onClick={function(e) { handleNavClick(e, 'whatschanged'); }}
-          >
-            What's Changed
-          </a>
-          <a 
             href="#orgchart"
             className={activeRoute === 'orgchart' ? 'active' : ''}
             onClick={function(e) { handleNavClick(e, 'orgchart'); }}

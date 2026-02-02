@@ -139,20 +139,80 @@ function handleApiError(err, res, endpoint) {
   
   console.error("/" + endpoint + " error:", status, message, err ? err.message : "");
   
+  // Extract provider and finch code from error if available
+  var provider = null;
+  var finchCode = null;
+  if (err && err.response && err.response.data) {
+    if (typeof err.response.data === 'object') {
+      provider = err.response.data.provider || err.response.data.context?.provider;
+      finchCode = err.response.data.finch_code || err.response.data.code;
+    }
+  }
+  if (provider) {
+    console.error("[Finch] Provider:", provider);
+  }
+  if (finchCode) {
+    console.error("[Finch] Finch Code:", finchCode);
+  }
+  
   // Handle provider errors
   if (status === 404 || status === 501) {
-    return res.status(status).json({ error: "Provider does not implement " + endpoint + " endpoint" });
+    var errorMsg = "Provider does not implement " + endpoint + " endpoint";
+    if (provider) {
+      errorMsg = provider + " does not support the " + endpoint + " endpoint";
+    }
+    return res.status(status).json({ 
+      error: errorMsg,
+      provider: provider,
+      endpoint: endpoint
+    });
   }
   
   // Handle rate limiting
   if (status === 429) {
     return res.status(429).json({ 
       error: "Too many requests. Please wait a moment and try again.",
-      details: "Rate limit exceeded"
+      details: "Rate limit exceeded",
+      provider: provider
     });
   }
   
-  res.status(status).json(message);
+  // Handle authentication errors
+  if (status === 401 || status === 403) {
+    return res.status(status).json({
+      error: "Authentication failed. Please reconnect your HR provider.",
+      details: typeof message === 'string' ? message : message.error || "Authentication error",
+      provider: provider
+    });
+  }
+  
+  // Generic error response with provider info if available
+  var errorResponse = message;
+  if (typeof message === 'object' && message !== null) {
+    errorResponse = { ...message };
+    if (provider && !errorResponse.provider) {
+      errorResponse.provider = provider;
+    }
+    if (finchCode && !errorResponse.finch_code) {
+      errorResponse.finch_code = finchCode;
+    }
+    if (!errorResponse.endpoint) {
+      errorResponse.endpoint = endpoint;
+    }
+  } else {
+    errorResponse = {
+      error: typeof message === 'string' ? message : "An error occurred",
+      endpoint: endpoint
+    };
+    if (provider) {
+      errorResponse.provider = provider;
+    }
+    if (finchCode) {
+      errorResponse.finch_code = finchCode;
+    }
+  }
+  
+  res.status(status).json(errorResponse);
 }
 
 // Basic endpoints
@@ -214,7 +274,26 @@ app.post("/create_link_token", function(req, res) {
       finch_code: err.error?.finch_code,
       context: err.error?.context
     });
-    res.status(500).json({ error: "Failed to create session" });
+    
+    // Provide more specific error messages for common issues
+    var errorMessage = "Failed to create session";
+    if (err.error?.finch_code) {
+      errorMessage = err.error.message || errorMessage;
+    } else if (err.error?.message) {
+      errorMessage = err.error.message;
+    }
+    
+    // Check for provider-specific errors
+    if (err.error?.context?.provider) {
+      console.error("[Finch] Provider-specific error for:", err.error.context.provider);
+      errorMessage = "Connection failed for " + err.error.context.provider + ": " + errorMessage;
+    }
+    
+    res.status(err.status || 500).json({ 
+      error: errorMessage,
+      details: err.error?.finch_code || err.error?.code,
+      provider: err.error?.context?.provider
+    });
   });
 });
 

@@ -5,9 +5,7 @@ import "./App.css";
 
 // Components
 import Header from "./components/Header";
-import Hero from "./components/Hero";
-import Features from "./components/Features";
-import HowItWorks from "./components/HowItWorks";
+import Integrations from "./components/Integrations";
 import ConnectButton from "./components/ConnectButton";
 import CompanyInfo from "./components/CompanyInfo";
 import DeductionsInfo from "./components/DeductionsInfo";
@@ -21,7 +19,6 @@ import OrgChart from "./components/OrgChart";
 import EligibilityInfo from "./components/EligibilityInfo";
 import HeadcountReports from "./components/HeadcountReports";
 import AuditReports from "./components/AuditReports";
-import WhatsChanged from "./components/WhatsChanged";
 
 // Main app component - handles Finch Connect flow and data display
 function MainApp() {
@@ -661,7 +658,7 @@ function MainApp() {
   useEffect(function() {
     function handleHashChange() {
       var hash = window.location.hash.replace('#', '');
-      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit' || hash === 'whatschanged') {
+      if (hash === 'organization' || hash === 'payroll' || hash === 'deductions' || hash === 'documents' || hash === 'workforce' || hash === 'eligibility' || hash === 'orgchart' || hash === 'analytics' || hash === 'audit') {
         setActiveRoute(hash);
       }
     }
@@ -823,13 +820,9 @@ function MainApp() {
           </div>
         )}
 
-        {/* Landing Page Sections - Show when not connected */}
+        {/* Landing Page - Integrations */}
         {!isConnected && !loading && (
-          <>
-            <Hero onConnect={connectFinchReal} company={company} />
-            <Features />
-            <HowItWorks />
-          </>
+          <Integrations onConnect={connectFinchReal} />
         )}
 
         {/* Connected Content - Show when connected */}
@@ -942,14 +935,6 @@ function MainApp() {
               />
             )}
 
-            {/* What's Changed Route - Webhook Events */}
-            {activeRoute === 'whatschanged' && (
-              <WhatsChanged 
-                loading={loading}
-                error={error}
-                syncTimes={syncTimes}
-              />
-            )}
           </div>
         )}
       </main>
