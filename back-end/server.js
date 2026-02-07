@@ -43,6 +43,54 @@ function generateRandomCustomerId() {
   return prefix + timestamp + "_" + randomSuffix;
 }
 
+// Generate random employer/company name
+function generateRandomEmployerName() {
+  const companyPrefixes = [
+    "Acme", "Global", "Premier", "Elite", "Advanced", "Innovative", "Strategic", 
+    "Pacific", "Atlantic", "Continental", "National", "International", "United",
+    "Summit", "Peak", "Crest", "Apex", "Vertex", "Prime", "Select", "Premium",
+    "Dynamic", "Progressive", "Forward", "NextGen", "Tech", "Digital", "Cloud"
+  ];
+  
+  const companyNames = [
+    "Solutions", "Systems", "Services", "Group", "Corporation", "Enterprises",
+    "Industries", "Holdings", "Partners", "Associates", "Consulting", "Advisors",
+    "Management", "Resources", "Capital", "Ventures", "Investments", "Equity",
+    "Technologies", "Software", "Hardware", "Networks", "Communications", "Media",
+    "Manufacturing", "Distribution", "Logistics", "Supply", "Retail", "Commerce",
+    "Healthcare", "Medical", "Pharmaceuticals", "Biotech", "Wellness", "Fitness",
+    "Finance", "Banking", "Insurance", "Real Estate", "Property", "Development",
+    "Construction", "Engineering", "Architecture", "Design", "Creative", "Studio",
+    "Education", "Academy", "Institute", "University", "Learning", "Training",
+    "Energy", "Power", "Utilities", "Renewable", "Solar", "Wind",
+    "Transportation", "Shipping", "Aviation", "Automotive", "Fleet", "Delivery",
+    "Hospitality", "Restaurants", "Hotels", "Travel", "Tourism", "Entertainment",
+    "Food", "Beverage", "Agriculture", "Farming", "Fishing", "Forestry"
+  ];
+  
+  const suffixes = [
+    "Inc", "LLC", "Ltd", "Corp", "Co", "LLP", "PC", "PLLC"
+  ];
+  
+  // Randomly select a prefix (or none)
+  const usePrefix = Math.random() > 0.3; // 70% chance of using a prefix
+  const prefix = usePrefix ? companyPrefixes[Math.floor(Math.random() * companyPrefixes.length)] : "";
+  
+  // Randomly select a company name
+  const name = companyNames[Math.floor(Math.random() * companyNames.length)];
+  
+  // Randomly select a suffix (or none)
+  const useSuffix = Math.random() > 0.4; // 60% chance of using a suffix
+  const suffix = useSuffix ? " " + suffixes[Math.floor(Math.random() * suffixes.length)] : "";
+  
+  // Combine parts
+  if (prefix) {
+    return prefix + " " + name + suffix;
+  } else {
+    return name + suffix;
+  }
+}
+
 // Save captured data to fakeData.js file
 function saveCapturedData(employer, dataType, data) {
   if (employer !== 'justin-test') {
@@ -242,7 +290,7 @@ app.post("/create_link_token", function(req, res) {
   
   finch.connect.sessions.new({
     customer_id: generateRandomCustomerId(),
-    customer_name: "Acme-Corexxyz",
+    customer_name: generateRandomEmployerName(),
     products: ["company",
       "directory", 
       "individual",
@@ -395,74 +443,43 @@ app.get("/finch/callback", function(req, res) {
 
   console.log("[Finch] ✅ Authorization code validated, proceeding to exchange for access token");
 
-  // Exchange code for token using JSON payload (Finch docs approach)
-  var jsonPayload = {
-    client_id: process.env.FINCH_CLIENT_ID,
-    client_secret: process.env.FINCH_CLIENT_SECRET,
-    code: code,
-    redirect_uri: process.env.REDIRECT_URI || ""
-  };
-
+  // Exchange code for token using Finch SDK
   console.log("\n[Finch] ════════════════════════════════════════");
   console.log("[Finch] EXCHANGING CODE FOR ACCESS TOKEN");
   console.log("[Finch] ════════════════════════════════════════");
-  console.log("[Finch] Request URL: https://api.tryfinch.com/auth/token");
-  console.log("[Finch] Request Method: POST");
-  console.log("[Finch] Request Headers:", {
-    "Content-Type": "application/json",
-    "Finch-API-Version": "2020-09-17"
-  });
-  console.log("[Finch] Request Payload:", {
-    client_id: jsonPayload.client_id,
-    client_secret: "***REDACTED***",
-    code: code,
-    redirect_uri: jsonPayload.redirect_uri
-  });
+  console.log("[Finch] Using Finch SDK: finch.accessTokens.create()");
+  console.log("[Finch] Code:", code);
   console.log("[Finch] ════════════════════════════════════════\n");
   
-  axios.post(
-    "https://api.tryfinch.com/auth/token",
-    jsonPayload,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "Finch-API-Version": "2020-09-17",
-      },
-      timeout: 15000,
-    }
-  )
-  .then(function(tokenResp) {
-    var accessToken = tokenResp.data ? tokenResp.data.access_token : null;
-    var tokenType = tokenResp.data ? tokenResp.data.token_type : null;
-    var expiresIn = tokenResp.data ? tokenResp.data.expires_in : null;
-    var scope = tokenResp.data ? tokenResp.data.scope : null;
-    
-    console.log("\n[Finch] ════════════════════════════════════════");
-    console.log("[Finch] TOKEN EXCHANGE RESPONSE");
-    console.log("[Finch] ════════════════════════════════════════");
-    console.log("[Finch] Response Status:", tokenResp.status, tokenResp.statusText);
-    console.log("[Finch] Response Headers (original format):");
-    console.log(tokenResp.headers);
-    console.log("[Finch] Full Response Data (original format):");
-    console.log(tokenResp.data);
-    console.log("\n[Finch] ACCESS TOKEN DETAILS:");
-    console.log("[Finch] Token Type:", tokenType);
-    console.log("[Finch] Expires In:", expiresIn, "seconds");
-    console.log("[Finch] Scope:", scope);
-    console.log("[Finch] Access Token (full):", accessToken);
-    console.log("[Finch] Access Token (preview):", accessToken ? (accessToken.slice(0, 20) + "..." + accessToken.slice(-20)) : "null");
-    console.log("[Finch] Access Token length:", accessToken ? accessToken.length : 0);
-    console.log("[Finch] ════════════════════════════════════════\n");
-    
-    if (!accessToken) {
-      console.error("[Finch] ❌ No access token in response");
-      return res.status(500).send("Failed to obtain access token.");
-    }
+  // Use Finch SDK to exchange code for access token
+  finch.accessTokens.create({ code: code })
+    .then(function(tokenResponse) {
+      var accessToken = tokenResponse.access_token;
+      var connectionId = tokenResponse.connection_id;
+      var providerId = tokenResponse.provider_id;
+      var products = tokenResponse.products;
+      
+      console.log("\n[Finch] ════════════════════════════════════════");
+      console.log("[Finch] TOKEN EXCHANGE RESPONSE");
+      console.log("[Finch] ════════════════════════════════════════");
+      console.log("[Finch] Connection ID:", connectionId);
+      console.log("[Finch] Provider ID:", providerId);
+      console.log("[Finch] Products:", products);
+      console.log("[Finch] Token Type:", tokenResponse.token_type);
+      console.log("[Finch] Access Token (preview):", accessToken ? (accessToken.slice(0, 20) + "..." + accessToken.slice(-20)) : "null");
+      console.log("[Finch] Access Token length:", accessToken ? accessToken.length : 0);
+      console.log("[Finch] ════════════════════════════════════════\n");
+      
+      if (!accessToken) {
+        console.error("[Finch] ❌ No access token in response");
+        return res.status(500).send("Failed to obtain access token.");
+      }
 
-    // Store token
-    currentAccessToken = accessToken;
-    console.log("[Finch] ✅ Access token stored successfully");
-    console.log("[Finch] Token stored in memory (currentAccessToken)");
+      // Store token
+      currentAccessToken = accessToken;
+      console.log("[Finch] ✅ Access token stored successfully");
+      console.log("[Finch] Token stored in memory (currentAccessToken)");
+      console.log("[Finch] Connection ID:", connectionId);
 
     // Log what we're sending back to the browser
     console.log("\n");
@@ -495,9 +512,18 @@ app.get("/finch/callback", function(req, res) {
     console.error("╔════════════════════════════════════════════════════════════════╗");
     console.error("║                 TOKEN EXCHANGE ERROR                            ║");
     console.error("╚════════════════════════════════════════════════════════════════╝");
-    console.error("[Finch] Error Message:", err.message);
-    console.error("[Finch] Error Code:", err.code);
-    if (err.response) {
+    console.error("[Finch] Error Message:", err.message || err.error?.message);
+    console.error("[Finch] Error Code:", err.code || err.error?.code);
+    
+    // Handle SDK error format
+    if (err.error) {
+      console.error("[Finch] Error details:", {
+        status: err.status,
+        code: err.error.code,
+        message: err.error.message,
+        finch_code: err.error.finch_code
+      });
+    } else if (err.response) {
       console.error("[Finch] Response Status:", err.response.status);
       console.error("[Finch] Response Status Text:", err.response.statusText);
       console.error("[Finch] Response Headers (original format):");
@@ -531,52 +557,55 @@ app.post("/finch/exchange-code", function(req, res) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
 
-  // Exchange code for token
-  var jsonPayload = {
-    client_id: process.env.FINCH_CLIENT_ID,
-    client_secret: process.env.FINCH_CLIENT_SECRET,
-    code: code,
-    redirect_uri: process.env.REDIRECT_URI || ""
-  };
-
-  console.log("[Finch] Exchanging code for access token...");
+  console.log("[Finch] Exchanging code for access token using Finch SDK...");
   
-  axios.post(
-    "https://api.tryfinch.com/auth/token",
-    jsonPayload,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "Finch-API-Version": "2020-09-17",
-      },
-      timeout: 15000,
-    }
-  )
-  .then(function(tokenResp) {
-    var accessToken = tokenResp.data ? tokenResp.data.access_token : null;
-    
-    if (!accessToken) {
-      console.error("[Finch] No access token in response");
-      return res.status(500).json({ error: "Failed to obtain access token" });
-    }
+  // Use Finch SDK to exchange code for access token
+  finch.accessTokens.create({ code: code })
+    .then(function(tokenResponse) {
+      console.log("[Finch] Token exchange response received");
+      console.log("[Finch] Connection ID:", tokenResponse.connection_id);
+      console.log("[Finch] Provider ID:", tokenResponse.provider_id);
+      console.log("[Finch] Products:", tokenResponse.products);
+      
+      var accessToken = tokenResponse.access_token;
+      
+      if (!accessToken) {
+        console.error("[Finch] No access token in response");
+        return res.status(500).json({ error: "Failed to obtain access token" });
+      }
 
-    // Store token
-    currentAccessToken = accessToken;
-    console.log("[Finch] ✅ Access token stored successfully for embedded flow");
+      // Store token
+      currentAccessToken = accessToken;
+      console.log("[Finch] ✅ Access token stored successfully for embedded flow");
+      console.log("[Finch] Connection ID:", tokenResponse.connection_id);
 
-    res.json({ 
-      success: true,
-      message: "Successfully connected to Finch"
+      res.json({ 
+        success: true,
+        message: "Successfully connected to Finch",
+        connection_id: tokenResponse.connection_id,
+        provider_id: tokenResponse.provider_id
+      });
+    })
+    .catch(function(err) {
+      console.error("[Finch] Token exchange error:", err);
+      var errorMessage = "Failed to exchange authorization code";
+      
+      // Handle SDK error format
+      if (err.error) {
+        errorMessage = err.error.message || err.error.error || errorMessage;
+        console.error("[Finch] Error details:", {
+          status: err.status,
+          code: err.error.code,
+          message: err.error.message,
+          finch_code: err.error.finch_code
+        });
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      var statusCode = err.status || 500;
+      res.status(statusCode).json({ error: errorMessage });
     });
-  })
-  .catch(function(err) {
-    console.error("[Finch] Token exchange error:", err);
-    var errorMessage = "Failed to exchange authorization code";
-    if (err.response && err.response.data) {
-      errorMessage = err.response.data.error || errorMessage;
-    }
-    res.status(500).json({ error: errorMessage });
-  });
 });
 
 // HR data endpoints

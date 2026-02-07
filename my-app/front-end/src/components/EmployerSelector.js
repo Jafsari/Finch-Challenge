@@ -7,8 +7,8 @@ function EmployerSelector(props) {
   
   var employers = [
     { id: 'justin-test', name: 'Justin-test' },
-    { id: 'ramp', name: 'Ramp' },
-    { id: 'deel', name: 'Deel' },
+    { id: 'ramp', name: 'Mercury' },
+    { id: 'deel', name: 'MorningStar' },
     { id: 'ubiquity', name: 'Ubiquity' }
   ];
 

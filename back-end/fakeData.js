@@ -109817,9 +109817,9 @@ var fakeData = {
   'ramp': {
     'company': {
       'id': "ramp-001",
-      'legal_name': "Ramp Financial Inc.",
-      'name': "Ramp",
-      'primary_email': "hello@ramp.com",
+      'legal_name': "Mercury Financial Inc.",
+      'name': "Mercury",
+      'primary_email': "hello@mercury.com",
       'primary_phone_number': "+1 (555) 200-0002",
       'ein': "98-7654321",
       'entity': {
@@ -109838,7 +109838,7 @@ var fakeData = {
       ],
       'accounts': [
         {
-          'account_name': "Ramp Operating Account",
+          'account_name': "Mercury Operating Account",
           'account_number': "****5678",
           'account_type': "checking",
           'routing_number': "****9012"
@@ -109903,7 +109903,7 @@ var fakeData = {
         'individual': {
           'first_name': "David",
           'last_name': "Chen",
-          'email': "david.chen@ramp.com"
+          'email': "david.chen@mercury.com"
         },
         'employment': {
           'id': "ramp-emp-001",
@@ -109939,7 +109939,7 @@ var fakeData = {
         'individual': {
           'first_name': "Jessica",
           'last_name': "Martinez",
-          'email': "jessica.martinez@ramp.com"
+          'email': "jessica.martinez@mercury.com"
         },
         'employment': {
           'id': "ramp-emp-002",
@@ -109973,7 +109973,7 @@ var fakeData = {
         'individual': {
           'first_name': "Robert",
           'last_name': "Taylor",
-          'email': "robert.taylor@ramp.com"
+          'email': "robert.taylor@mercury.com"
         },
         'employment': {
           'id': "ramp-emp-003",
@@ -110079,9 +110079,9 @@ var fakeData = {
   'deel': {
     'company': {
       'id': "deel-001",
-      'legal_name': "Deel Global Solutions LLC",
-      'name': "Deel",
-      'primary_email': "info@deel.com",
+      'legal_name': "MorningStar Global Solutions LLC",
+      'name': "MorningStar",
+      'primary_email': "info@morningstar.com",
       'primary_phone_number': "+1 (555) 300-0003",
       'ein': "11-2233445",
       'entity': {
@@ -110100,7 +110100,7 @@ var fakeData = {
       ],
       'accounts': [
         {
-          'account_name': "Deel Main Account",
+          'account_name': "Morning Star Main Account",
           'account_number': "****9012",
           'account_type': "checking",
           'routing_number': "****3456"
@@ -110165,7 +110165,7 @@ var fakeData = {
         'individual': {
           'first_name': "Maria",
           'last_name': "Garcia",
-          'email': "maria.garcia@deel.com"
+          'email': "maria.garcia@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-001",
@@ -110201,7 +110201,7 @@ var fakeData = {
         'individual': {
           'first_name': "James",
           'last_name': "Anderson",
-          'email': "james.anderson@deel.com"
+          'email': "james.anderson@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-002",
@@ -110235,7 +110235,7 @@ var fakeData = {
         'individual': {
           'first_name': "Lisa",
           'last_name': "Thompson",
-          'email': "lisa.thompson@deel.com"
+          'email': "lisa.thompson@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-003",
@@ -110734,9 +110734,9 @@ var fakeData = {
   'deel': {
     'company': {
       'id': "deel-001",
-      'legal_name': "Deel Global Solutions LLC",
-      'name': "Deel",
-      'primary_email': "info@deel.com",
+      'legal_name': "MorningStar Global Solutions LLC",
+      'name': "MorningStar",
+      'primary_email': "info@morningstar.com",
       'primary_phone_number': "+1 (555) 300-0003",
       'ein': "11-2233445",
       'entity': {
@@ -110755,7 +110755,7 @@ var fakeData = {
       ],
       'accounts': [
         {
-          'account_name': "Deel Main Account",
+          'account_name': "Morning Star Main Account",
           'account_number': "****9012",
           'account_type': "checking",
           'routing_number': "****3456"
@@ -110820,7 +110820,7 @@ var fakeData = {
         'individual': {
           'first_name': "Maria",
           'last_name': "Garcia",
-          'email': "maria.garcia@deel.com"
+          'email': "maria.garcia@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-001",
@@ -110856,7 +110856,7 @@ var fakeData = {
         'individual': {
           'first_name': "James",
           'last_name': "Wilson",
-          'email': "james.wilson@deel.com"
+          'email': "james.wilson@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-002",
@@ -110890,7 +110890,7 @@ var fakeData = {
         'individual': {
           'first_name': "Lisa",
           'last_name': "Thompson",
-          'email': "lisa.thompson@deel.com"
+          'email': "lisa.thompson@morningstar.com"
         },
         'employment': {
           'id': "deel-emp-003",
